@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
+import ImportAccounts from './pages/ImportAccounts'
 import AccountDetail from './pages/AccountDetail'
 import Activities from './pages/Activities'
 import Opportunities from './pages/Opportunities'
@@ -24,6 +25,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/accounts" element={<Accounts />} />
+        <Route path="/accounts/import" element={isAdmin ? <ImportAccounts /> : <Navigate to="/accounts" replace />} />
         <Route path="/accounts/retail" element={<Accounts fixedType="Retail" />} />
         <Route path="/accounts/foodservice" element={<Accounts fixedType="Foodservice" />} />
         <Route path="/accounts/hotel" element={<Accounts fixedType="Hotel" />} />

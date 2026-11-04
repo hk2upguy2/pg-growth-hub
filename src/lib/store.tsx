@@ -6,6 +6,7 @@ import { buildSeed } from './seed'
 import { hasSupabase, supabase } from './supabase'
 import { emitSyncError, loadAll, persist, remote } from './db'
 import { nowISO, uid, toDateStr, localDate } from './utils'
+import type { ImportRow } from './importer'
 
 /**
  * DEMO-MODE DATA LAYER (localStorage).
@@ -63,6 +64,8 @@ interface Ctx {
   addVisitToPlan: (planId: string, accountId: string) => void
   updateRouteVisit: (id: string, patch: Partial<RouteVisit>) => void
   removeRouteVisit: (id: string) => void
+  importAccounts: (rows: ImportRow[]) => Promise<{ added: number; failed: number; error?: string }>
+  assignAccounts: (ids: string[], repId: string) => void
   saveProfile: (p: Partial<Profile> & { name: string; email: string }) => Profile
   resetDemo: () => void
   clearDemo: () => void
@@ -469,6 +472,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (hasSupabase) persist(() => remote.deleteVisit(id), refresh)
   }
 
+  const importAccounts: Ctx['importAccounts'] = async rows => {
+    needAdmin()
+    const maxNo = db.accounts.reduce((m, x) => Math.max(m, parseInt(x.accountNo.replace(/\D/g, '')) || 0), 1000)
+    const stamp = nowISO()
+    const created: Account[] = rows.map((r, i) => ({ ...r, id: uid(), accountNo: `PG-${maxNo + 1 + i}`, createdAt: stamp, isDemo: false }))
+    if (!hasSupabase) {
+      setDb(d => ({ ...d, accounts: [...d.accounts, ...created] }))
+      return { added: created.length, failed: 0 }
+    }
+    let added = 0
+    try {
+      for (let i = 0; i < created.length; i += 100) {
+        const chunk = created.slice(i, i + 100)
+        await remote.insertAccounts(chunk)
+        added += chunk.length
+      }
+    } catch (e) {
+      await refresh()
+      return { added, failed: created.length - added, error: e instanceof Error ? e.message : 'Import failed' }
+    }
+    await refresh()
+    return { added, failed: 0 }
+  }
+  const assignAccounts = (ids: string[], repId: string) => {
+    needAdmin()
+    const set = new Set(ids)
+    setDb(d => ({ ...d, accounts: d.accounts.map(a => (set.has(a.id) ? { ...a, repId } : a)) }))
+    if (hasSupabase) persist(() => remote.assignAccounts(ids, repId), refresh)
+  }
+
   const saveProfile: Ctx['saveProfile'] = p => {
     needAdmin()
     if (hasSupabase && !p.id) throw new Error('New users create their own login on the sign-in screen (or are invited from Supabase → Authentication). They appear here after first sign-in.')
@@ -515,7 +548,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
-    saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
+    importAccounts, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
     updateRouteVisit, removeRouteVisit, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

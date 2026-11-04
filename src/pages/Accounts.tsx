@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Plus, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Search, Upload } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { ACCOUNT_TYPES, ALL_VILLAGES, Account, AccountType, PRIORITIES, STATUSES, territoryOf } from '../types'
 import { AccountForm } from '../components/forms'
-import { Badge, DemoBadge, EmptyState, ExportMenu, PageHeader } from '../components/ui'
+import { Badge, DemoBadge, EmptyState, ExportMenu, PageHeader, useAction } from '../components/ui'
 import { daysSince, exportCSV, exportXLS, fmtDate, money } from '../lib/utils'
 import { PRIORITY_ORDER } from '../lib/seed'
 
@@ -22,7 +22,10 @@ export function accountRows(list: Account[], repName: (id: string) => string) {
 }
 
 export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
-  const { accounts, profiles, repName, isAdmin } = useStore()
+  const { accounts, profiles, repName, isAdmin, assignAccounts } = useStore()
+  const run = useAction()
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [assignTo, setAssignTo] = useState('')
   const [q, setQ] = useState('')
   const [type, setType] = useState<string>('')
   const [status, setStatus] = useState('')
@@ -69,6 +72,7 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
         subtitle={`${rows.length} of ${accounts.filter(a => !fixedType || a.type === fixedType).length} accounts`}
         actions={<>
           <ExportMenu onCSV={() => exportCSV(title.toLowerCase().replace(/\s+/g, '-'), exp())} onXLS={() => exportXLS(title.toLowerCase().replace(/\s+/g, '-'), exp())} />
+          {isAdmin && <Link to="/accounts/import" className="btn-secondary"><Upload size={16} /> Import</Link>}
           <button className="btn-primary" onClick={() => setAdding(true)}><Plus size={16} /> Add {isAdmin ? 'account' : 'prospect'}</button>
         </>}
       />
@@ -85,12 +89,25 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
         <label className="flex items-center gap-2 text-sm px-2"><input type="checkbox" checked={stale} onChange={e => setStale(e.target.checked)} /> Not visited 30d+</label>
       </div>
 
+      {isAdmin && selected.size > 0 && (
+        <div className="card p-3 mb-3 flex flex-wrap items-center gap-2 bg-navy-50 border-navy-200">
+          <span className="text-sm font-semibold text-navy-900">{selected.size} selected</span>
+          <select id="bulk-rep" className="input !w-auto" value={assignTo} onChange={e => setAssignTo(e.target.value)}>
+            <option value="">Choose a rep…</option><option value="__none">Unassign</option>
+            {profiles.filter(p => p.role === 'rep' && p.active).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn-primary" disabled={!assignTo}
+            onClick={() => { run(() => assignAccounts([...selected], assignTo === '__none' ? '' : assignTo), `${selected.size} accounts updated`); setSelected(new Set()); setAssignTo('') }}>Assign</button>
+          <button className="btn-secondary" onClick={() => setSelected(new Set())}>Clear</button>
+        </div>
+      )}
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[900px]">
-          <thead><tr>{th('Account', 'name')}<th className="th">Type / Segment</th><th className="th">Village</th>{th('Priority', 'priority')}{th('Status', 'status')}{th('Potential/mo', 'monthlyPotential')}<th className="th">Rep</th>{th('Last visit', 'lastVisit')}<th className="th">Next follow-up</th></tr></thead>
+          <thead><tr>{isAdmin && <th className="th w-8"><input type="checkbox" aria-label="Select all shown" checked={rows.length > 0 && rows.every(r => selected.has(r.id))} onChange={e => setSelected(e.target.checked ? new Set(rows.map(r => r.id)) : new Set())} /></th>}{th('Account', 'name')}<th className="th">Type / Segment</th><th className="th">Village</th>{th('Priority', 'priority')}{th('Status', 'status')}{th('Potential/mo', 'monthlyPotential')}<th className="th">Rep</th>{th('Last visit', 'lastVisit')}<th className="th">Next follow-up</th></tr></thead>
           <tbody>
             {rows.map(a => (
               <tr key={a.id} className="hover:bg-slate-50">
+                {isAdmin && <td className="td w-8"><input type="checkbox" aria-label={`Select ${a.name}`} checked={selected.has(a.id)} onChange={e => setSelected(s => { const n = new Set(s); if (e.target.checked) n.add(a.id); else n.delete(a.id); return n })} /></td>}
                 <td className="td"><Link to={`/account/${a.id}`} className="font-medium text-navy-700 hover:underline">{a.name}</Link>{a.isDemo && <span className="ml-2"><DemoBadge /></span>}<div className="text-xs text-slate-400">{a.accountNo}</div></td>
                 <td className="td">{a.type}<div className="text-xs text-slate-500">{a.segment}</div></td>
                 <td className="td">{a.village}<div className="text-xs text-slate-500">{territoryOf(a.village)}</div></td>

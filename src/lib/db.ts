@@ -127,6 +127,13 @@ export async function loadAll(): Promise<DB> {
 /* ---------- writes ---------- */
 export const remote = {
   async saveAccount(a: Account) { const { error } = await sb().from('accounts').upsert(accountTo(a)); fail('save account', error) },
+  async insertAccounts(list: Account[]) { const { error } = await sb().from('accounts').insert(list.map(accountTo)); fail('import accounts', error) },
+  async assignAccounts(ids: string[], repId: string) {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error } = await sb().from('accounts').update({ assigned_rep_id: repId || null }).in('id', ids.slice(i, i + 100))
+      fail('assign accounts', error)
+    }
+  },
   async deleteAccount(id: string) { const { error } = await sb().from('accounts').delete().eq('id', id); fail('delete account', error) },
   async saveActivity(a: Activity) { const { error } = await sb().from('sales_activities').upsert(activityTo(a)); fail('save activity', error) },
   async deleteActivity(id: string) { const { error } = await sb().from('sales_activities').delete().eq('id', id); fail('delete activity', error) },
