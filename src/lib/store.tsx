@@ -3,6 +3,8 @@ import {
   Account, Activity, CompetitorRecord, DB, Opportunity, Profile, Promotion, RoutePlan, RouteVisit,
 } from '../types'
 import { buildSeed } from './seed'
+import { hasSupabase, supabase } from './supabase'
+import { emitSyncError, loadAll, persist, remote } from './db'
 import { nowISO, uid, toDateStr, localDate } from './utils'
 
 /**
@@ -11,6 +13,7 @@ import { nowISO, uid, toDateStr, localDate } from './utils'
  * current user's role and every write is checked. In Supabase mode the same rules are enforced by
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
+const EMPTY: DB = { profiles: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
 const KEY = 'pg-growth-hub:db:v1'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
@@ -27,8 +30,11 @@ function load(): DB {
 interface Ctx {
   user: Profile | null
   isAdmin: boolean
+  loading: boolean
   login: (userId: string) => void
   logout: () => void
+  signIn: (email: string, password: string) => Promise<string | null>
+  signUp: (email: string, password: string, name: string) => Promise<string | null>
   // scoped (role-filtered) data
   profiles: Profile[]
   accounts: Account[]
@@ -70,14 +76,45 @@ export const useStore = () => {
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [db, setDb] = useState<DB>(load)
+  const [db, setDb] = useState<DB>(hasSupabase ? EMPTY : load)
   const [userId, setUserId] = useState<string | null>(() => {
+    if (hasSupabase) return null
     try { return localStorage.getItem(USER_KEY) } catch { return null }
   })
+  const [loading, setLoading] = useState(hasSupabase)
 
   useEffect(() => {
+    if (hasSupabase) return
     try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* quota */ }
   }, [db])
+
+  /** Supabase mode: reload everything this user is allowed to see (row-level security does the filtering). */
+  const refresh = useCallback(async () => {
+    try { setDb(await loadAll()) } catch (e) { emitSyncError(e instanceof Error ? e.message : 'Could not load data') }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) return
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') return
+      setUserId(session?.user.id ?? null)
+      // never call supabase inside this callback directly (can deadlock) - defer
+      if (session) setTimeout(() => { refresh().finally(() => setLoading(false)) }, 0)
+      else { setDb(EMPTY); setLoading(false) }
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [refresh])
+
+  // keep reps in sync with each other: refresh when the app comes back to the foreground
+  useEffect(() => {
+    if (!supabase) return
+    let last = Date.now()
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && Date.now() - last > 20000) { last = Date.now(); void refresh() }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [refresh])
 
   const user = useMemo(() => db.profiles.find(p => p.id === userId && p.active) ?? null, [db.profiles, userId])
   const isAdmin = user?.role === 'admin'
@@ -86,7 +123,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUserId(id)
     try { localStorage.setItem(USER_KEY, id) } catch { /* ignore */ }
   }, [])
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!supabase) return 'Supabase is not configured'
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    return error ? error.message : null
+  }, [])
+  const signUp = useCallback(async (email: string, password: string, name: string) => {
+    if (!supabase) return 'Supabase is not configured'
+    const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: name.trim() } } })
+    if (error) return error.message
+    if (!data.session) return 'Check your email to confirm your address, then sign in.'
+    return null
+  }, [])
   const logout = useCallback(() => {
+    if (supabase) { void supabase.auth.signOut(); return }
     setUserId(null)
     try { localStorage.removeItem(USER_KEY) } catch { /* ignore */ }
   }, [])
@@ -165,10 +215,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isDemo: existing?.isDemo,
     }
     setDb(d => ({ ...d, accounts: existing ? d.accounts.map(x => (x.id === full.id ? full : x)) : [...d.accounts, full] }))
+    if (hasSupabase) persist(() => remote.saveAccount(full), refresh)
     return full
   }
   const deleteAccount = (id: string) => {
     needAdmin()
+    if (hasSupabase) persist(() => remote.deleteAccount(id), refresh)
     setDb(d => ({
       ...d,
       accounts: d.accounts.filter(a => a.id !== id),
@@ -217,6 +269,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activities: existing ? d.activities.map(x => (x.id === full.id ? full : x)) : [full, ...d.activities],
       accounts: syncAccountFromActivity(d.accounts, full),
     }))
+    if (hasSupabase) persist(() => remote.saveActivity(full), refresh)
     return full
   }
   const deleteActivity = (id: string) => {
@@ -225,6 +278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!ex) return
     if (u.role !== 'admin' && ex.repId !== u.id) throw new Error('Permission denied')
     setDb(d => ({ ...d, activities: d.activities.filter(a => a.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteActivity(id), refresh)
   }
   const completeFollowUp = (id: string) => {
     const u = need()
@@ -232,6 +286,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!ex) return
     assertAccount(u, ex.accountId)
     setDb(d => ({ ...d, activities: d.activities.map(a => (a.id === id ? { ...a, followUpDone: true } : a)) }))
+    if (hasSupabase) persist(() => remote.saveActivity({ ...ex, followUpDone: true }), refresh)
   }
 
   const saveOpportunity: Ctx['saveOpportunity'] = o => {
@@ -257,6 +312,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isDemo: existing?.isDemo,
     }
     setDb(d => ({ ...d, opportunities: existing ? d.opportunities.map(x => (x.id === full.id ? full : x)) : [full, ...d.opportunities] }))
+    if (hasSupabase) persist(() => remote.saveOpportunity(full), refresh)
     return full
   }
   const deleteOpportunity = (id: string) => {
@@ -265,6 +321,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!ex) return
     assertAccount(u, ex.accountId)
     setDb(d => ({ ...d, opportunities: d.opportunities.filter(o => o.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteOpportunity(id), refresh)
   }
 
   const savePromotion: Ctx['savePromotion'] = p => {
@@ -288,6 +345,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       createdAt: existing?.createdAt ?? nowISO(),
     }
     setDb(d => ({ ...d, promotions: existing ? d.promotions.map(x => (x.id === full.id ? full : x)) : [full, ...d.promotions] }))
+    if (hasSupabase) persist(() => remote.savePromotion(full), refresh)
     return full
   }
   const deletePromotion = (id: string) => {
@@ -296,6 +354,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!ex) return
     if (u.role !== 'admin' && ex.responsibleId !== u.id) throw new Error('Permission denied')
     setDb(d => ({ ...d, promotions: d.promotions.filter(p => p.id !== id) }))
+    if (hasSupabase) persist(() => remote.deletePromotion(id), refresh)
   }
 
   const saveCompetitor: Ctx['saveCompetitor'] = c => {
@@ -319,6 +378,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       createdAt: existing?.createdAt ?? nowISO(),
     }
     setDb(d => ({ ...d, competitors: existing ? d.competitors.map(x => (x.id === full.id ? full : x)) : [full, ...d.competitors] }))
+    if (hasSupabase) persist(() => remote.saveCompetitor(full, u.id), refresh)
     return full
   }
   const deleteCompetitor = (id: string) => {
@@ -327,6 +387,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!ex) return
     if (u.role !== 'admin' && ex.repId !== u.id) throw new Error('Permission denied')
     setDb(d => ({ ...d, competitors: d.competitors.filter(c => c.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteCompetitor(id), refresh)
   }
 
   const saveRoutePlan: Ctx['saveRoutePlan'] = (p, accountIds) => {
@@ -350,6 +411,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       routePlans: existing ? d.routePlans.map(x => (x.id === plan.id ? plan : x)) : [plan, ...d.routePlans],
       routeVisits: [...d.routeVisits, ...visits],
     }))
+    if (hasSupabase) persist(() => remote.saveRoutePlan(plan, visits), refresh)
     return plan
   }
   const deleteRoutePlan = (id: string) => {
@@ -358,6 +420,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!ex) return
     if (u.role !== 'admin' && ex.repId !== u.id) throw new Error('Permission denied')
     setDb(d => ({ ...d, routePlans: d.routePlans.filter(p => p.id !== id), routeVisits: d.routeVisits.filter(v => v.planId !== id) }))
+    if (hasSupabase) persist(() => remote.deleteRoutePlan(id), refresh)
   }
   const addVisitToPlan = (planId: string, accountId: string) => {
     const u = need()
@@ -365,10 +428,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!plan || (u.role !== 'admin' && plan.repId !== u.id)) throw new Error('Permission denied')
     assertAccount(u, accountId)
     if (db.routeVisits.some(v => v.planId === planId && v.accountId === accountId)) return
-    setDb(d => ({
-      ...d,
-      routeVisits: [...d.routeVisits, { id: uid(), planId, accountId, status: 'Planned', outcome: '', visitedAt: null, createdAt: nowISO() }],
-    }))
+    const visit: RouteVisit = { id: uid(), planId, accountId, status: 'Planned', outcome: '', visitedAt: null, createdAt: nowISO() }
+    setDb(d => ({ ...d, routeVisits: [...d.routeVisits, visit] }))
+    if (hasSupabase) persist(() => remote.saveVisits([visit]), refresh)
   }
   const updateRouteVisit = (id: string, patch: Partial<RouteVisit>) => {
     const u = need()
@@ -377,23 +439,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const plan = db.routePlans.find(p => p.id === v.planId)
     if (!plan || (u.role !== 'admin' && plan.repId !== u.id)) throw new Error('Permission denied')
     const next: RouteVisit = { ...v, ...patch, id: v.id, planId: v.planId, accountId: v.accountId }
-    setDb(d => {
-      let accounts = d.accounts
-      let activities = d.activities
-      // Marking a visit as Visited records a real Customer Visit activity and updates the account.
-      if (patch.status === 'Visited' && v.status !== 'Visited') {
-        const at = nowISO()
-        next.visitedAt = at
-        const act: Activity = {
-          id: uid(), at, accountId: v.accountId, repId: plan.repId, type: 'Customer Visit',
-          summary: patch.outcome || next.outcome || 'Visit completed from route plan.', products: '', outcome: patch.outcome || next.outcome || 'Visited',
-          nextAction: '', followUpDate: null, followUpDone: false, createdAt: at,
-        }
-        activities = [act, ...activities]
-        accounts = syncAccountFromActivity(accounts, act)
+    let act: Activity | null = null
+    // Marking a visit as Visited records a real Customer Visit activity and updates the account.
+    if (patch.status === 'Visited' && v.status !== 'Visited') {
+      const at = nowISO()
+      next.visitedAt = at
+      const outcome = patch.outcome || next.outcome || 'Visited'
+      act = {
+        id: uid(), at, accountId: v.accountId, repId: plan.repId, type: 'Customer Visit',
+        summary: patch.outcome || next.outcome || 'Visit completed from route plan.', products: '', outcome,
+        nextAction: '', followUpDate: null, followUpDone: false, createdAt: at,
       }
-      return { ...d, accounts, activities, routeVisits: d.routeVisits.map(x => (x.id === id ? next : x)) }
-    })
+    }
+    setDb(d => ({
+      ...d,
+      accounts: act ? syncAccountFromActivity(d.accounts, act) : d.accounts,
+      activities: act ? [act, ...d.activities] : d.activities,
+      routeVisits: d.routeVisits.map(x => (x.id === id ? next : x)),
+    }))
+    if (hasSupabase) persist(async () => { await remote.saveVisits([next]); if (act) await remote.saveActivity(act) }, refresh)
   }
   const removeRouteVisit = (id: string) => {
     const u = need()
@@ -402,10 +466,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const plan = db.routePlans.find(p => p.id === v.planId)
     if (!plan || (u.role !== 'admin' && plan.repId !== u.id)) throw new Error('Permission denied')
     setDb(d => ({ ...d, routeVisits: d.routeVisits.filter(x => x.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteVisit(id), refresh)
   }
 
   const saveProfile: Ctx['saveProfile'] = p => {
     needAdmin()
+    if (hasSupabase && !p.id) throw new Error('New users create their own login on the sign-in screen (or are invited from Supabase → Authentication). They appear here after first sign-in.')
     const existing = p.id ? db.profiles.find(x => x.id === p.id) : undefined
     const full: Profile = {
       id: existing?.id ?? uid(),
@@ -422,6 +488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!otherAdmins.length) throw new Error('At least one active administrator is required')
     }
     setDb(d => ({ ...d, profiles: existing ? d.profiles.map(x => (x.id === full.id ? full : x)) : [...d.profiles, full] }))
+    if (hasSupabase) persist(() => remote.saveProfile(full), refresh)
     return full
   }
 
@@ -444,7 +511,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
 
   const value: Ctx = {
-    user, isAdmin: !!isAdmin, login, logout,
+    user, isAdmin: !!isAdmin, loading, login, logout, signIn, signUp,
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,

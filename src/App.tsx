@@ -16,7 +16,8 @@ import Users from './pages/Users'
 import SettingsPage from './pages/Settings'
 
 export default function App() {
-  const { user, isAdmin } = useStore()
+  const { user, isAdmin, loading } = useStore()
+  if (loading) return <div className="min-h-full flex items-center justify-center text-slate-500 text-sm">Loading PG Growth Hub…</div>
   if (!user) return <Login />
   return (
     <Layout>

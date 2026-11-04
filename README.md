@@ -11,7 +11,7 @@ React + TypeScript · Tailwind · Lucide · Recharts · Supabase (Auth + Postgre
 | 2 | Account CRUD, directory, detail pages | Done |
 | 3 | Sales activities + opportunities (weighted pipeline) | Done |
 | 4 | Dashboard calculations + 11 reports | Done |
-| 5 | Supabase auth + database integration | **Not yet wired** — SQL schema is written; the app currently runs on the localStorage data layer |
+| 5 | Supabase auth + database integration | **Code written, not yet verified against a live project.** Email/password login, load + save for every table (`src/lib/db.ts`). Needs the SQL run once in your project (below) |
 | 6 | Role-based permissions | Enforced in the demo data layer (`src/lib/store.tsx`) and in Postgres RLS (`supabase/migrations/002_rls.sql`). The RLS policies have **not yet been run against a live Supabase project** |
 | 7 | CSV / Excel export + PWA | Done (exports are CSV and Excel-compatible `.xls`; PWA manifest + service worker via `vite-plugin-pwa`) |
 | 8 | Testing | Type-check and production build pass. Manual UI testing and Supabase testing still to do |
@@ -49,7 +49,14 @@ Requires Node 18+.
    Use only the **anon** key in the frontend. Never expose the `service_role` key.
 5. The **first** user to sign up becomes the administrator; everyone after is a sales rep. Admins promote users in User Management (database trigger blocks anyone else from changing roles).
 
-`src/lib/supabase.ts` already creates the client and exposes `hasSupabase`. What remains is a Supabase-backed provider with the same interface as `StoreProvider` in `src/lib/store.tsx`, plus a real login screen.
+When the two env vars are set the app switches from demo mode to Supabase automatically: the sign-in screen becomes email + password, data loads through `src/lib/db.ts`, and saves go to the database (the screen updates immediately, then the server confirms; a failed save shows an error and reloads from the server). The app also reloads data when it returns to the foreground so reps see each other's updates.
+
+**First-run checklist**
+1. Run `001_schema.sql` then `002_rls.sql` in the Supabase SQL Editor.
+2. Authentication → Sign In / Providers → Email: for a quick start turn off "Confirm email" (turn it back on later if you prefer).
+3. **You create your account first on the sign-in screen**: the first account becomes the administrator.
+4. Each rep then creates their own account (or you invite them from Authentication → Users). Open User Management to set their territory, then assign accounts to them.
+5. In Authentication → Sign In / Providers, switch off public sign-ups once your 12 reps are in.
 
 ## Deploy to Vercel
 

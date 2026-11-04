@@ -105,6 +105,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setList(l => [...l, { id, msg, kind }])
     setTimeout(() => setList(l => l.filter(t => t.id !== id)), 3500)
   }, [])
+  useEffect(() => {
+    const h = (e: Event) => push((e as CustomEvent<string>).detail, 'err')
+    window.addEventListener('pg-sync-error', h)
+    return () => window.removeEventListener('pg-sync-error', h)
+  }, [push])
   return (
     <ToastCtx.Provider value={push}>
       {children}
