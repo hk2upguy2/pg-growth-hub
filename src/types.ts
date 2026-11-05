@@ -189,7 +189,20 @@ export interface SalesRecord {
   importedAt: string
 }
 
+export interface Message {
+  id: string
+  senderId: string
+  recipientId: string | null // null = all sales reps
+  subject: string
+  body: string
+  urgent: boolean
+  createdAt: string
+}
+export interface MessageRead { messageId: string; userId: string; readAt: string }
+
 export interface DB {
+  messages: Message[]
+  messageReads: MessageRead[]
   profiles: Profile[]
   sales: SalesRecord[]
   accounts: Account[]

@@ -2,7 +2,7 @@ import { ReactNode, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ShoppingCart, UtensilsCrossed, Hotel, ClipboardList, Target, Package, Route,
-  CalendarDays, Swords, BarChart3, Users, Settings, Menu, X, LogOut, FlaskConical,
+  CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Menu, X, LogOut, FlaskConical,
 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { hasSupabase } from '../lib/supabase'
@@ -20,13 +20,15 @@ const NAV = [
   { to: '/routes', label: 'Route Planner', icon: Route },
   { to: '/promotions', label: 'Promotion Calendar', icon: CalendarDays },
   { to: '/competitors', label: 'Competitor Tracking', icon: Swords },
+  { to: '/messages', label: 'Messages', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/users', label: 'User Management', icon: Users, admin: true },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
-  const { isAdmin } = useStore()
+  const { isAdmin, user, messages, messageReads } = useStore()
+  const unread = isAdmin ? 0 : messages.filter(m => !messageReads.some(r => r.messageId === m.id && r.userId === user?.id)).length
   return (
     <nav className="px-3 space-y-0.5">
       {NAV.filter(n => !n.admin || isAdmin).map(n => (
@@ -38,6 +40,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           )}
         >
           <n.icon size={18} /> {n.label}
+          {n.to === '/messages' && unread > 0 && <span className="ml-auto rounded-full bg-red-500 text-white text-xs font-semibold px-2 py-0.5">{unread}</span>}
         </NavLink>
       ))}
     </nav>

@@ -92,3 +92,8 @@ supabase/migrations/    001_schema.sql, 002_rls.sql
 - **Assign to reps:** tick accounts in the Account Directory, choose a rep, click Assign.
 - **Sage sales:** Account Directory, then Sales update. Upload a CSV with customer number, month or invoice date, amount, and optionally brand and quantity. Loading the same month again replaces it. Each account's *actual monthly sales* becomes the average of the newest three months in the data; *last order* is the newest sale; a Prospect that has bought becomes Active.
 - **Supabase:** run `supabase/migrations/003_sage_sales.sql` **before** deploying this version.
+
+## Messages
+
+Management: Messages, then choose **All sales reps** or **Choose reps** (one or several), write the message, optionally mark it urgent. The Sent list shows how many reps have read each one. Reps see only messages addressed to them or to everyone, with an unread badge in the menu.
+- **Supabase:** run `supabase/migrations/004_messages.sql` **before** deploying this version.

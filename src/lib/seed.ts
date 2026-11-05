@@ -1,5 +1,5 @@
 import {
-  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Opportunity, Priority, Profile,
+  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, Opportunity, Priority, Profile,
   PRODUCTS, Promotion, SalesRecord, RoutePlan, RouteVisit, Stage, STAGE_DEFAULT_PROB, territoryOf,
 } from '../types'
 import { deriveAccountUpdates } from './sales'
@@ -275,7 +275,12 @@ export function buildSeed(): DB {
   const dm = new Map(derived.updated.map(a => [a.id, a]))
   const accountsFinal = accounts.map(a => dm.get(a.id) ?? a)
 
-  return { profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits }
+  const messages: Message[] = [{
+    id: 'm-1', senderId: 'u-admin', recipientId: null, subject: 'Welcome to PG Growth Hub (demo message)',
+    body: 'This is a sample broadcast to all sales reps. Log every visit the same day and keep next follow-up dates up to date.',
+    urgent: false, createdAt: new Date(Date.now() - 86400000).toISOString(),
+  }]
+  return { messages, messageReads: [], profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

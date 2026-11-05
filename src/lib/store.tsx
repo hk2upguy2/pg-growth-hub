@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, CompetitorRecord, DB, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
 import { hasSupabase, supabase } from './supabase'
@@ -15,7 +15,7 @@ import { NewSales, deriveAccountUpdates, sageKey } from './sales'
  * current user's role and every write is checked. In Supabase mode the same rules are enforced by
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
-const EMPTY: DB = { profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
+const EMPTY: DB = { messages: [], messageReads: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
 const KEY = 'pg-growth-hub:db:v2'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
@@ -46,6 +46,8 @@ interface Ctx {
   competitors: CompetitorRecord[]
   routePlans: RoutePlan[]
   routeVisits: RouteVisit[]
+  messages: Message[]
+  messageReads: MessageRead[]
   repName: (id: string) => string
   accountName: (id: string) => string
   // mutations (throw on permission failure)
@@ -69,6 +71,9 @@ interface Ctx {
   importSales: (recs: NewSales[]) => Promise<{ saved: number; updated: number; activated: number; error?: string }>
   importAccounts: (rows: ImportRow[]) => Promise<{ added: number; failed: number; error?: string }>
   assignAccounts: (ids: string[], repId: string) => void
+  sendMessage: (to: string[] | 'all', subject: string, body: string, urgent: boolean) => number
+  deleteMessage: (id: string) => void
+  markMessagesRead: (ids: string[]) => void
   saveProfile: (p: Partial<Profile> & { name: string; email: string }) => Profile
   resetDemo: () => void
   clearDemo: () => void
@@ -149,7 +154,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---- scoped reads ----
   const scoped = useMemo(() => {
-    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] } as Omit<DB, 'profiles'>
+    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
     const myAccounts = db.accounts.filter(a => a.repId === user.id)
     const ids = new Set(myAccounts.map(a => a.id))
@@ -164,6 +169,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       competitors: db.competitors.filter(c => c.repId === user.id || ids.has(c.accountId)),
       routePlans: myPlans,
       routeVisits: db.routeVisits.filter(v => planIds.has(v.planId)),
+      messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id),
+      messageReads: db.messageReads.filter(r => r.userId === user.id),
     }
   }, [db, user, isAdmin])
 
@@ -559,6 +566,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return full
   }
 
+  const sendMessage: Ctx['sendMessage'] = (to, subject, body, urgent) => {
+    const u = needAdmin()
+    if (!body.trim()) throw new Error('Write a message first')
+    const reps = db.profiles.filter(p => p.role !== 'admin' && p.active)
+    const targets: (string | null)[] = to === 'all' ? [null] : [...new Set(to)].filter(id => reps.some(r => r.id === id))
+    if (!targets.length) throw new Error('Choose who to send this to')
+    const now = nowISO()
+    const list: Message[] = targets.map(t => ({ id: uid(), senderId: u.id, recipientId: t, subject: subject.trim(), body: body.trim(), urgent, createdAt: now }))
+    setDb(d => ({ ...d, messages: [...list, ...d.messages] }))
+    if (hasSupabase) persist(() => remote.sendMessages(list), refresh)
+    return to === 'all' ? reps.length : list.length
+  }
+  const deleteMessage: Ctx['deleteMessage'] = id => {
+    needAdmin()
+    setDb(d => ({ ...d, messages: d.messages.filter(m => m.id !== id), messageReads: d.messageReads.filter(r => r.messageId !== id) }))
+    if (hasSupabase) persist(() => remote.deleteMessage(id), refresh)
+  }
+  const markMessagesRead: Ctx['markMessagesRead'] = ids => {
+    const u = need()
+    const have = new Set(db.messageReads.filter(r => r.userId === u.id).map(r => r.messageId))
+    const rows: MessageRead[] = ids.filter(id => !have.has(id) && db.messages.some(m => m.id === id && (m.recipientId === null || m.recipientId === u.id)))
+      .map(id => ({ messageId: id, userId: u.id, readAt: nowISO() }))
+    if (!rows.length) return
+    setDb(d => ({ ...d, messageReads: [...d.messageReads, ...rows] }))
+    if (hasSupabase) persist(() => remote.markRead(rows), refresh)
+  }
+
   const resetDemo = () => {
     needAdmin()
     setDb(buildSeed())
@@ -583,7 +617,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
     importAccounts, importSales, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
-    updateRouteVisit, removeRouteVisit, saveProfile, resetDemo, clearDemo,
+    updateRouteVisit, removeRouteVisit, sendMessage, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }

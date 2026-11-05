@@ -13,6 +13,7 @@ import Products from './pages/Products'
 import RoutePlanner from './pages/RoutePlanner'
 import Promotions from './pages/Promotions'
 import Competitors from './pages/Competitors'
+import Messages from './pages/Messages'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
 import SettingsPage from './pages/Settings'
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/routes" element={<RoutePlanner />} />
         <Route path="/promotions" element={<Promotions />} />
         <Route path="/competitors" element={<Competitors />} />
+        <Route path="/messages" element={<Messages />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={isAdmin ? <Users /> : <Navigate to="/" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
