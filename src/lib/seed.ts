@@ -1,14 +1,16 @@
 import {
   Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Opportunity, Priority, Profile,
-  Promotion, RoutePlan, RouteVisit, Stage, STAGE_DEFAULT_PROB,
+  PRODUCTS, Promotion, SalesRecord, RoutePlan, RouteVisit, Stage, STAGE_DEFAULT_PROB, territoryOf,
 } from '../types'
+import { deriveAccountUpdates } from './sales'
 import { daysAgoStr, daysFromNowStr, addDays, toDateStr } from './utils'
 
 /**
  * ILLUSTRATIVE DEMO DATA ONLY.
  * Business names are used as example records. They are NOT confirmed Pacific Grocers customers,
  * contact details are not verified, and every dollar figure is an illustrative estimate.
- * No actual sales are represented (monthlySales is 0 on every record).
+ * Sales history is GENERATED to look realistic (varied monthly amounts, 6 months of order history) but is not real.
+ * The 12 businesses named after real Guam companies carry no sales; real figures arrive via the Sage import.
  */
 const DEMO_NOTE = 'ILLUSTRATIVE DEMO RECORD – not a confirmed Pacific Grocers customer. Figures are illustrative estimates.'
 
@@ -142,7 +144,138 @@ export function buildSeed(): DB {
     { id: 'rv-3', planId, accountId: byName('Cost-U-Less'), status: 'Planned', outcome: '', visitedAt: null, createdAt: new Date().toISOString() },
   ]
 
-  return { profiles, sales: [], accounts, activities, opportunities, promotions, competitors, routePlans, routeVisits }
+  // ---- 88 more illustrative accounts, so demo mode shows a realistic 100-account book ----
+  // Every name is fictional and carries "(Demo)". Contacts, addresses and dollar figures are placeholders.
+  let rs = 20260505
+  const rnd = () => { rs = (rs * 1664525 + 1013904223) % 4294967296; return rs / 4294967296 }
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]
+  const between = (lo: number, hi: number) => lo + Math.floor(rnd() * (hi - lo + 1))
+  const roundTo = (n: number, step: number) => Math.round(n / step) * step
+
+  interface Kind { segment: string; type: Account['type']; count: number; nouns: string[]; pot: [number, number]; brand: BrandName; products: string }
+  const KINDS: Kind[] = [
+    { segment: 'Bar', type: 'Foodservice', count: 12, nouns: ['Tavern', 'Sports Bar', 'Lounge', 'Taproom'], pot: [2500, 6000], brand: 'Agrosuper', products: 'Party Wings, Drummettes' },
+    { segment: 'Chicken Restaurant', type: 'Foodservice', count: 8, nouns: ['Chicken Shack', 'Wings & Things', 'Fried Chicken'], pot: [3000, 8000], brand: 'Agrosuper', products: 'Party Wings, Leg Quarters, Thighs' },
+    { segment: 'BBQ Restaurant', type: 'Foodservice', count: 6, nouns: ['BBQ Pit', 'Smokehouse', 'Grill'], pot: [3000, 7000], brand: 'Agrosuper', products: 'Chicken Breast, Leg Quarters, Thighs' },
+    { segment: 'Korean Restaurant', type: 'Foodservice', count: 8, nouns: ['Korean BBQ', 'Kitchen', 'Tofu House'], pot: [3500, 9000], brand: 'Kikkoman', products: 'Party Wings, Kikkoman soy sauce' },
+    { segment: 'Japanese Restaurant', type: 'Foodservice', count: 7, nouns: ['Sushi', 'Izakaya', 'Ramen House'], pot: [3000, 8000], brand: 'Kikkoman', products: 'Kikkoman soy sauce, Teriyaki sauce' },
+    { segment: 'Restaurant', type: 'Foodservice', count: 12, nouns: ['Bistro', 'Family Diner', 'Kitchen'], pot: [2500, 7000], brand: 'Agrosuper', products: 'Chicken Breast, Thighs, Whole Chicken' },
+    { segment: 'Coffee Shop / Diner', type: 'Foodservice', count: 5, nouns: ['Coffee House', 'Diner'], pot: [1500, 3500], brand: 'Hostess', products: 'Hostess pastry, Whole Chicken' },
+    { segment: 'Catering', type: 'Foodservice', count: 4, nouns: ['Catering Co.', 'Events Catering'], pot: [4000, 10000], brand: 'Agrosuper', products: 'Party Wings, Whole Chicken, Chicken Breast' },
+    { segment: 'Supermarket', type: 'Retail', count: 8, nouns: ['Market', 'Supermarket', 'Grocery'], pot: [8000, 25000], brand: 'Hostess', products: 'Hostess endcap and new SKUs, Party Wings, Kikkoman range' },
+    { segment: 'Convenience Store', type: 'Retail', count: 10, nouns: ['Mini Mart', 'Quick Stop', 'Corner Store'], pot: [2000, 6000], brand: 'Hostess', products: 'Hostess product placement, shelf display' },
+    { segment: 'Resort Hotel', type: 'Hotel', count: 4, nouns: ['Resort', 'Beach Hotel', 'Suites'], pot: [9000, 20000], brand: 'Agrosuper', products: 'Party Wings, Chicken Breast, Kikkoman Foodservice Soy Sauce' },
+    { segment: 'Institutional', type: 'Institutional', count: 4, nouns: ['School Cafeteria', 'Care Center', 'Senior Center'], pot: [3000, 9000], brand: 'Agrosuper', products: 'Whole Chicken, Leg Quarters' },
+  ]
+  const ADJ = ['Coral', 'Harbor', 'Sunset', 'Palm', 'Blue Reef', 'Island', 'Latte Stone', 'Tropic', 'Pacific', 'Marina', 'Banyan', 'Typhoon',
+    'Lagoon', 'Hibiscus', 'Plumeria', 'Starfish', 'Trade Wind', 'Bayview', 'Ironwood', 'Mango', 'Seabreeze', 'Reef', 'Sandbar', 'Orchid']
+  const VIL = ['Dededo', 'Dededo', 'Yigo', 'Tamuning', 'Tamuning', 'Tumon', 'Barrigada', 'Mangilao', 'Harmon', 'Maite', 'Chalan Pago', 'Agat', 'Santa Rita', 'Other Southern Village']
+  const STAGE_POOL: Stage[] = [...Array(6).fill('Identified'), ...Array(5).fill('Contacted'), ...Array(3).fill('Sample Delivered'),
+    ...Array(3).fill('Quotation Submitted'), ...Array(2).fill('Negotiation'), 'Won', 'Lost']
+  const NEXT: Record<Stage, string> = {
+    Identified: 'Introductory call', Contacted: 'Book sampling visit', 'Sample Delivered': 'Collect sample feedback',
+    'Quotation Submitted': 'Follow up on quotation', Negotiation: 'Agree delivery schedule and price', Won: 'Monitor repeat orders', Lost: 'Revisit in 6 months',
+  }
+  const usedNames = new Set(accounts.map(a => a.name))
+  let gen = 0
+  for (const k of KINDS) {
+    for (let j = 0; j < k.count; j++) {
+      gen++
+      let name = `${pick(ADJ)} ${pick(k.nouns)} (Demo)`
+      while (usedNames.has(name)) name = `${pick(ADJ)} ${pick(k.nouns)} ${gen} (Demo)`
+      usedNames.add(name)
+      const village = pick(VIL)
+      const repId = k.type === 'Hotel' ? 'u-rep3' : territoryOf(village) === 'North' ? 'u-rep1' : 'u-rep2'
+      const pot = roundTo(between(k.pot[0], k.pot[1]), k.pot[1] > 12000 ? 500 : 100)
+      const priority: Priority = pot >= 12000 ? 'A+' : pot >= 6000 ? (rnd() < 0.3 ? 'A+' : 'A') : pot >= 3500 ? (rnd() < 0.3 ? 'A' : 'B') : 'C'
+      const roll = rnd()
+      const status = priority === 'C' && roll < 0.35 ? 'Inactive' : roll < 0.12 ? 'On Hold' : 'Prospect'
+      const visited = rnd() > 0.25
+      const visitAgo = visited ? between(1, 90) : null
+      const followIn = rnd() < 0.55 ? between(-12, 21) : null
+      const id = `a-g${gen}`
+      accounts.push({
+        id, accountNo: `PG-${1012 + gen}`, name, type: k.type, segment: k.segment, village,
+        address: 'Illustrative – address not verified', contactName: 'Demo Contact (Owner)', contactPosition: k.type === 'Hotel' ? 'Purchasing Manager' : k.type === 'Retail' ? 'Buyer' : 'Owner',
+        phone: '', email: '', repId, priority, status, monthlyPotential: pot, monthlySales: 0, currentProducts: '', potentialProducts: k.products,
+        competitor: 'Unknown – to verify', lastVisit: visitAgo === null ? null : daysAgoStr(visitAgo),
+        nextFollowUp: followIn === null ? null : daysFromNowStr(followIn), notes: DEMO_NOTE,
+        createdAt: new Date(Date.now() - between(5, 95) * 86400000).toISOString(), isDemo: true,
+      })
+
+      // activity history for accounts that have been visited
+      if (visitAgo !== null && status !== 'Inactive') {
+        const mk = (n: number, type: ActivityType, ago: number, summary: string, outcome: string, next: string, fu: number | null): Activity => {
+          const d = addDays(new Date(), -ago); d.setHours(8 + between(0, 8), between(0, 59), 0, 0)
+          return { id: `act-g${gen}-${n}`, at: d.toISOString(), accountId: id, repId, type, summary, products: k.products.split(',')[0], outcome, nextAction: next,
+            followUpDate: fu === null ? null : daysFromNowStr(fu), followUpDone: false, createdAt: d.toISOString() }
+        }
+        activities.push(mk(1, 'Customer Visit', visitAgo, `Visited ${k.segment.toLowerCase()} and reviewed current purchasing (illustrative).`, pick(['Interested', 'Wants a quotation', 'Open to samples', 'Needs follow-up']), pick(['Send price list', 'Deliver samples', 'Call back']), followIn))
+        if (rnd() < 0.5) activities.push(mk(2, pick<ActivityType>(['Phone Call', 'Email', 'Product Presentation', 'Product Sampling', 'Quotation']), visitAgo + between(8, 40), 'Earlier contact with the owner (illustrative).', 'Positive', 'Visit in person', null))
+      }
+
+      // opportunities on about 4 in 10 accounts
+      if (status !== 'Inactive' && rnd() < 0.42) {
+        const stage = pick(STAGE_POOL)
+        const brand = k.brand
+        const product = pick(PRODUCTS[brand])
+        const closed = stage === 'Won' || stage === 'Lost'
+        opportunities.push({
+          id: `o-g${gen}`, accountId: id, brand, product, monthlyValue: roundTo(pot * (0.25 + rnd() * 0.35), 100), stage,
+          probability: STAGE_DEFAULT_PROB[stage], expectedClose: daysFromNowStr(closed ? -between(3, 20) : between(7, 75)), repId,
+          nextAction: NEXT[stage], notes: 'Illustrative estimate – demo record.', lostReason: stage === 'Lost' ? pick(['Existing supplier contract', 'Price', 'Quality concerns', 'Retailer imports direct']) : undefined,
+          createdAt: new Date(Date.now() - between(5, 60) * 86400000).toISOString(), isDemo: true,
+        })
+      }
+    }
+  }
+
+  // ---- Generated sales history: 6 months per buying account, different for every account ----
+  const sales: SalesRecord[] = []
+  const monthKey = (back: number) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - back); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+  const today = new Date()
+  const BRAND_MIX: Record<string, BrandName[]> = { Agrosuper: ['Agrosuper', 'Kikkoman'], Hostess: ['Hostess', 'Agrosuper'], Kikkoman: ['Kikkoman', 'Agrosuper'] }
+  const CASE_PRICE: Record<string, number> = { Agrosuper: 46, Hostess: 38, Kikkoman: 52 }
+  for (const a of accounts) {
+    if (!a.id.startsWith('a-g') || a.status === 'Inactive' || rnd() < 0.3) continue
+    const kind = KINDS.find(k => k.segment === a.segment)!
+    const trend = 0.85 + rnd() * 0.35          // growth or decline over the six months
+    const base = a.monthlyPotential * (0.3 + rnd() * 0.8)
+    const first = between(0, 4)                  // some accounts are newer customers
+    const brands = BRAND_MIX[kind.brand]
+    const split = 0.6 + rnd() * 0.35
+    for (let back = 6 - first; back >= 0; back--) {
+      if (back === 0 && rnd() > 0.35) continue   // month-to-date: only some accounts have ordered yet
+      const seasonal = 0.85 + rnd() * 0.3
+      const age = 6 - back
+      const total = base * seasonal * Math.pow(trend, age / 6) * (back === 0 ? 0.5 : 1)
+      brands.forEach((brand, i) => {
+        const part = i === 0 ? split : 1 - split
+        if (i === 1 && rnd() < 0.35) return
+        const amount = Math.round(total * part / 5) * 5 + between(0, 4) * 5
+        if (amount <= 0) return
+        const m = monthKey(back)
+        const maxDay = back === 0 ? Math.max(1, today.getDate() - 1) : 28
+        const day = between(1, maxDay)
+        sales.push({ id: `s-${a.id}-${m}-${brand}`, accountId: a.id, month: m, brand, amount,
+          quantity: Math.max(1, Math.round(amount / CASE_PRICE[brand])), lastDate: `${m}-${String(day).padStart(2, '0')}`, importedAt: new Date().toISOString() })
+      })
+      // one order-history entry per month with sales
+      const mine = sales.filter(x => x.accountId === a.id && x.month === monthKey(back))
+      if (mine.length) {
+        const amt = mine.reduce((t, x) => t + x.amount, 0), cases = mine.reduce((t, x) => t + (x.quantity ?? 0), 0)
+        const dt = new Date(mine[0].lastDate + 'T10:00:00')
+        activities.push({ id: `act-ord-${a.id}-${monthKey(back)}`, at: dt.toISOString(), accountId: a.id, repId: a.repId, type: 'Follow-up',
+          summary: `Order received: ${cases} cases, $${amt.toLocaleString('en-US')} (illustrative order history)`, products: mine.map(x => x.brand).join(', '),
+          outcome: 'Order delivered', nextAction: 'Confirm next reorder', followUpDate: null, followUpDone: true, createdAt: dt.toISOString() })
+      }
+    }
+  }
+  const derived = deriveAccountUpdates(accounts, sales)
+  const dm = new Map(derived.updated.map(a => [a.id, a]))
+  const accountsFinal = accounts.map(a => dm.get(a.id) ?? a)
+
+  return { profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

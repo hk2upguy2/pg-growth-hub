@@ -16,7 +16,7 @@ import { NewSales, deriveAccountUpdates, sageKey } from './sales'
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
 const EMPTY: DB = { profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
-const KEY = 'pg-growth-hub:db:v1'
+const KEY = 'pg-growth-hub:db:v2'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
 function load(): DB {

@@ -23,7 +23,7 @@ With no Supabase credentials the app runs fully in the browser using `localStora
 - **Demo Manager** (Management): sees everything, manages users, exports, deletes.
 - **Demo Rep A/B/C** (Sales Rep): see only their assigned accounts and related records.
 
-The demo records (Hyatt Regency Guam, Dusit Thani, Hilton, Pay-Less, Don Don Donki, HappyMart, Cost-U-Less, Jamaican Grill, King's, Shirley's, Mosa's Joint, Pasak Chicken) are **illustrative only**. They are flagged "Demo", are not confirmed Pacific Grocers customers, contain no verified contact details, and every dollar value is an illustrative estimate. Actual monthly sales are `$0` on all of them. Management can remove them under Settings → *Remove demo records*.
+Demo mode loads 100 illustrative accounts: 12 named after well-known Guam businesses (Hyatt Regency Guam, Dusit Thani, Hilton, Pay-Less, Don Don Donki, HappyMart, Cost-U-Less, Jamaican Grill, King's, Shirley's, Mosa's Joint, Pasak Chicken) plus 88 generated ones whose names all end in “(Demo)”. All are **illustrative only**. They are flagged "Demo", are not confirmed Pacific Grocers customers, contain no verified contact details, and every dollar value is an illustrative estimate. Actual monthly sales are `$0` on all of them. Management can remove them under Settings → *Remove demo records*.
 
 ## Install and run locally
 
