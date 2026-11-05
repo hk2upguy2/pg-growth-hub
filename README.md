@@ -85,3 +85,10 @@ supabase/migrations/    001_schema.sql, 002_rls.sql
 - Route Planner builds daily visit lists by territory and ranks accounts to visit first. It does **not** do GPS or map routing; that would need a mapping service such as Google Maps or Mapbox.
 - Weighted pipeline = estimated monthly value × probability for open opportunities. In Postgres it is a generated column, so the client cannot spoof it.
 - Competitor attachments are stored as data URLs in demo mode (1.5 MB limit) and map to a private Supabase Storage bucket in production.
+
+## Importing data
+
+- **Accounts:** Account Directory, then Import (management only). Upload a CSV (Excel: Save As, CSV UTF-8). Columns are matched automatically, duplicates are skipped, and unrecognised values use the defaults you choose. Include a *Customer Number* column to store the Sage customer number.
+- **Assign to reps:** tick accounts in the Account Directory, choose a rep, click Assign.
+- **Sage sales:** Account Directory, then Sales update. Upload a CSV with customer number, month or invoice date, amount, and optionally brand and quantity. Loading the same month again replaces it. Each account's *actual monthly sales* becomes the average of the newest three months in the data; *last order* is the newest sale; a Prospect that has bought becomes Active.
+- **Supabase:** run `supabase/migrations/003_sage_sales.sql` **before** deploying this version.

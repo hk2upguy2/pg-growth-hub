@@ -73,6 +73,7 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
         actions={<>
           <ExportMenu onCSV={() => exportCSV(title.toLowerCase().replace(/\s+/g, '-'), exp())} onXLS={() => exportXLS(title.toLowerCase().replace(/\s+/g, '-'), exp())} />
           {isAdmin && <Link to="/accounts/import" className="btn-secondary"><Upload size={16} /> Import</Link>}
+          {isAdmin && <Link to="/accounts/sales-update" className="btn-secondary"><Upload size={16} /> Sales update</Link>}
           <button className="btn-primary" onClick={() => setAdding(true)}><Plus size={16} /> Add {isAdmin ? 'account' : 'prospect'}</button>
         </>}
       />

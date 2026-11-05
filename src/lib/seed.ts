@@ -142,7 +142,7 @@ export function buildSeed(): DB {
     { id: 'rv-3', planId, accountId: byName('Cost-U-Less'), status: 'Planned', outcome: '', visitedAt: null, createdAt: new Date().toISOString() },
   ]
 
-  return { profiles, accounts, activities, opportunities, promotions, competitors, routePlans, routeVisits }
+  return { profiles, sales: [], accounts, activities, opportunities, promotions, competitors, routePlans, routeVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

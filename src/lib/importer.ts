@@ -1,3 +1,4 @@
+import { sageKey } from './sales'
 import { ACCOUNT_TYPES, ALL_VILLAGES, Account, AccountStatus, AccountType, PRIORITIES, Priority, SEGMENTS, STATUSES } from '../types'
 
 export type ImportRow = Omit<Account, 'id' | 'accountNo' | 'createdAt' | 'isDemo'>
@@ -6,6 +7,7 @@ export interface FieldDef { key: string; label: string; aliases: string[]; requi
 
 export const FIELDS: FieldDef[] = [
   { key: 'name', label: 'Business name', required: true, aliases: ['business name', 'name', 'company', 'company name', 'customer', 'customer name', 'account name', 'account', 'business'] },
+  { key: 'sageNo', label: 'Sage customer number', aliases: ['customer number', 'customer no', 'customer #', 'customerno', 'cust no', 'custno', 'sage customer', 'sage customer number', 'customer id', 'account number', 'account no'] },
   { key: 'type', label: 'Account type', aliases: ['account type', 'type', 'category', 'channel'] },
   { key: 'segment', label: 'Business segment', aliases: ['segment', 'business segment', 'sub category', 'subcategory', 'business type'] },
   { key: 'village', label: 'Village / location', aliases: ['village', 'location', 'city', 'area', 'municipality', 'town'] },
@@ -63,11 +65,11 @@ export function parseCSV(input: string): string[][] {
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 
 /** Guess which file column feeds each field. -1 = not mapped. */
-export function autoMap(headers: string[]): Record<string, number> {
+export function autoMap(headers: string[], fields: FieldDef[] = FIELDS): Record<string, number> {
   const h = headers.map(norm)
   const used = new Set<number>()
   const map: Record<string, number> = {}
-  for (const f of FIELDS) {
+  for (const f of fields) {
     const aliases = f.aliases.map(norm)
     let idx = h.findIndex((x, i) => !used.has(i) && aliases.includes(x))
     if (idx < 0) idx = h.findIndex((x, i) => !used.has(i) && x.length > 2 && aliases.some(a => a.length > 3 && (x.includes(a) || a.includes(x))))
@@ -169,9 +171,10 @@ export const dupeKey = (name: string, village: string, address: string) => `${no
 
 export function prepare(
   rows: string[][], mapping: Record<string, number>, settings: ImportSettings,
-  reps: { id: string; name: string; email: string }[], existing: Pick<Account, 'name' | 'village' | 'address'>[],
+  reps: { id: string; name: string; email: string }[], existing: (Pick<Account, 'name' | 'village' | 'address'> & { sageNo?: string })[],
 ): Prepared[] {
   const seen = new Set(existing.map(a => dupeKey(a.name, a.village, a.address)))
+  const seenSage = new Set(existing.filter(a => a.sageNo).map(a => sageKey(a.sageNo!)))
   const repByName = new Map(reps.map(r => [norm(r.name), r.id]))
   const repByEmail = new Map(reps.map(r => [r.email.toLowerCase(), r.id]))
 
@@ -222,14 +225,16 @@ export function prepare(
 
     const address = get('address')
     const key = dupeKey(name, village, address)
+    const sageNo = get('sageNo')
     let duplicate = false
     if (name) {
-      if (seen.has(key)) duplicate = true
-      else seen.add(key)
+      const sk = sageNo ? sageKey(sageNo) : ''
+      if ((sk && seenSage.has(sk)) || seen.has(key)) duplicate = true
+      else { seen.add(key); if (sk) seenSage.add(sk) }
     }
 
     const data: ImportRow | null = errors.length ? null : {
-      name, type, segment: segment ?? 'Other', village, address,
+      name, sageNo, type, segment: segment ?? 'Other', village, address,
       contactName: get('contactName'), contactPosition: get('contactPosition'), phone: get('phone'), email: get('email'),
       repId, priority, status,
       monthlyPotential: money(get('monthlyPotential')), monthlySales: money(get('monthlySales')),

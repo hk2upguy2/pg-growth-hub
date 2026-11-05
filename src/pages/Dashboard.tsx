@@ -6,12 +6,13 @@ import { AlertTriangle, Building2, CalendarCheck, DollarSign, Hotel, ShoppingCar
 import { useStore } from '../lib/store'
 import { dashboard, followUpsDue, pipelineByStage, staleAccounts } from '../lib/analytics'
 import { Badge, DemoBadge, EmptyState, KPI, PageHeader } from '../components/ui'
-import { daysSince, fmtDate, fmtDateTime, money, moneyShort } from '../lib/utils'
+import { daysSince, fmtDate, fmtDateTime, money, moneyShort, monthLabel } from '../lib/utils'
+import type { SalesRecord } from '../types'
 
 const PIE = ['#0f2a4a', '#2c5d96', '#7fa3cc', '#b3c9e3']
 
 export default function Dashboard() {
-  const { accounts, activities, opportunities, profiles, isAdmin, user, repName, accountName } = useStore()
+  const { accounts, activities, opportunities, profiles, isAdmin, user, repName, accountName, sales } = useStore()
   const d = dashboard(accounts, activities, opportunities, profiles)
   const stages = pipelineByStage(opportunities).filter(s => s.stage !== 'Lost')
   const overdue = followUpsDue(activities).sort((a, b) => (a.followUpDate! < b.followUpDate! ? -1 : 1))
@@ -25,6 +26,7 @@ export default function Dashboard() {
         title={isAdmin ? 'Management Dashboard' : 'My Dashboard'}
         subtitle={isAdmin ? 'All accounts, representatives and pipeline' : `Your assigned accounts and pipeline · ${user?.name}`}
       />
+      <SalesFreshness sales={sales} isAdmin={isAdmin} />
       {noData && <div className="card p-6 mb-5"><EmptyState title="No accounts yet" hint="Add accounts from the Account Directory to populate the dashboard. Every figure here is calculated from your records." /></div>}
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mb-5">
@@ -34,7 +36,7 @@ export default function Dashboard() {
         <KPI label="Retail Accounts" value={d.retail} icon={<ShoppingCart size={18} />} />
         <KPI label="Foodservice Accounts" value={d.foodservice} icon={<UtensilsCrossed size={18} />} />
         <KPI label="Hotel Accounts" value={d.hotel} icon={<Hotel size={18} />} />
-        <KPI label="Monthly Sales Potential" value={moneyShort(d.monthlyPotential)} hint="Sum of account estimates" icon={<DollarSign size={18} />} />
+        <KPI label="Monthly Sales Potential" value={moneyShort(d.monthlyPotential)} hint={`Actual sales ${moneyShort(d.actualMonthlySales)}/mo`} icon={<DollarSign size={18} />} />
         <KPI label="Opportunity Pipeline" value={moneyShort(d.pipeline.gross)} hint={`Weighted ${moneyShort(d.pipeline.weighted)} · ${d.pipeline.openCount} open`} icon={<Target size={18} />} />
         <KPI label="Visited This Month" value={d.visitedThisMonth} hint={`of ${d.totalAccounts} accounts`} icon={<Footprints size={18} />} />
         <KPI label="Follow-ups Due" value={d.followUpsDue} hint="Due today or overdue" icon={<CalendarCheck size={18} />} tone={d.followUpsDue ? 'amber' : 'green'} />
@@ -161,5 +163,25 @@ export default function Dashboard() {
         </div>
       </div>
     </>
+  )
+}
+
+function SalesFreshness({ sales, isAdmin }: { sales: SalesRecord[]; isAdmin: boolean }) {
+  if (!sales.length) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 mb-4 text-sm text-slate-600">
+        No Sage sales data loaded yet. {isAdmin && <Link className="text-navy-700 underline" to="/accounts/sales-update">Load a sales file</Link>}
+      </div>
+    )
+  }
+  const through = [...sales].map(s => s.month).sort().pop()!
+  const updated = [...sales].map(s => s.importedAt).sort().pop()!
+  const age = daysSince(updated) ?? 0
+  const stale = age > 35
+  return (
+    <div className={`rounded-lg border px-4 py-2.5 mb-4 text-sm ${stale ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-600'}`}>
+      Sage sales data through <strong>{monthLabel(through)}</strong>, last updated {fmtDate(updated)}{stale ? ` (${age} days ago)` : ''}.
+      {stale && isAdmin && <> <Link className="underline" to="/accounts/sales-update">Load the latest file</Link></>}
+    </div>
   )
 }

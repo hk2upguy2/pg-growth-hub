@@ -4,14 +4,14 @@ import { ArrowLeft, Check, Mail, MapPin, Pencil, Phone, Plus, Trash2 } from 'luc
 import { useStore } from '../lib/store'
 import { AccountForm, ActivityForm, OpportunityForm } from '../components/forms'
 import { Badge, ConfirmButton, DemoBadge, EmptyState, PageHeader, useAction } from '../components/ui'
-import { daysSince, fmtDate, fmtDateTime, money } from '../lib/utils'
+import { daysSince, fmtDate, fmtDateTime, money, monthLabel } from '../lib/utils'
 import { territoryOf } from '../types'
 import { pipelineTotals, weighted } from '../lib/analytics'
 
 export default function AccountDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { accounts, activities, opportunities, competitors, routeVisits, routePlans, repName, isAdmin, deleteAccount, completeFollowUp, deleteActivity } = useStore()
+  const { accounts, activities, opportunities, competitors, routeVisits, routePlans, repName, isAdmin, sales, deleteAccount, completeFollowUp, deleteActivity } = useStore()
   const run = useAction()
   const [edit, setEdit] = useState(false)
   const [logging, setLogging] = useState(false)
@@ -27,6 +27,8 @@ export default function AccountDetail() {
   const comp = competitors.filter(c => c.accountId === a.id)
   const pt = pipelineTotals(opps)
   const attain = a.monthlyPotential > 0 ? Math.round((a.monthlySales / a.monthlyPotential) * 100) : 0
+  const mySales = sales.filter(s => s.accountId === a.id)
+  const salesMonths = [...new Set(mySales.map(s => s.month))].sort().reverse().slice(0, 6)
 
   return (
     <>
@@ -59,6 +61,8 @@ export default function AccountDetail() {
             <Info k="Last visit">{fmtDate(a.lastVisit)}{daysSince(a.lastVisit) !== null && <span className="text-xs text-slate-500"> ({daysSince(a.lastVisit)}d ago)</span>}</Info>
             <Info k="Next follow-up">{fmtDate(a.nextFollowUp)}</Info>
             <Info k="Date created">{fmtDate(a.createdAt)}</Info>
+            <Info k="Sage customer no.">{a.sageNo || '—'}</Info>
+            <Info k="Last order (Sage)">{fmtDate(a.lastOrderDate)}</Info>
           </dl>
         </div>
         <div className="card p-4">
@@ -137,6 +141,14 @@ export default function AccountDetail() {
         <div className="card p-4"><h3 className="font-semibold text-navy-900 mb-2">Competitor observations</h3>
           {comp.map(c => <div key={c.id} className="text-sm border-b border-slate-100 py-2 last:border-0"><div className="font-medium">{c.competitor} <span className="text-xs text-slate-500">· {fmtDate(c.recordedAt)}</span></div><div className="text-slate-600">{c.products} {c.price && `· ${c.price}`}</div><div className="text-xs text-slate-500">{c.observations}</div></div>)}
           {comp.length === 0 && <div className="text-sm text-slate-500">None recorded.</div>}</div>
+      </div>
+      <div className="card mt-4 mb-4">
+        <h3 className="font-semibold text-navy-900 px-4 pt-4">Sales from Sage</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[500px] mt-2"><thead><tr><th className="th">Month</th><th className="th">Total</th><th className="th">By brand</th></tr></thead>
+            <tbody>{salesMonths.map(m => { const l = mySales.filter(s => s.month === m); return <tr key={m}><td className="td">{monthLabel(m)}</td><td className="td font-medium">{money(l.reduce((t, s) => t + s.amount, 0))}</td><td className="td text-xs">{l.map(s => `${s.brand} ${money(s.amount)}`).join(' · ')}</td></tr> })}</tbody></table>
+          {salesMonths.length === 0 && <EmptyState title="No Sage sales loaded for this account" hint={a.sageNo ? 'Load a sales file from the Account Directory (Sales update).' : 'Add the Sage customer number to this account first.'} />}
+        </div>
       </div>
       {routePlans.length < 0 && null}
       {edit && <AccountForm open onClose={() => setEdit(false)} account={a} />}

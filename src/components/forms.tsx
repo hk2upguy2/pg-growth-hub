@@ -22,7 +22,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
     status: (account?.status ?? 'Prospect') as AccountStatus, monthlyPotential: String(account?.monthlyPotential ?? 0),
     monthlySales: String(account?.monthlySales ?? 0), currentProducts: account?.currentProducts ?? '',
     potentialProducts: account?.potentialProducts ?? '', competitor: account?.competitor ?? '',
-    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '',
+    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '',
   })
   const [f, setF] = useState(blank)
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) => setF(s => ({ ...s, [k]: v }))
@@ -35,6 +35,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
       monthlyPotential: Number(f.monthlyPotential) || 0, monthlySales: Number(f.monthlySales) || 0,
       nextFollowUp: f.nextFollowUp || null,
       repId: isAdmin ? f.repId : undefined,
+      sageNo: isAdmin ? f.sageNo : undefined,
     }), account ? 'Account updated' : 'Account created')
     if (saved) { onSaved?.(saved); onClose() }
   }
@@ -52,6 +53,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
         <Field label="Village / location">
           <select className="input" value={f.village} onChange={e => set('village', e.target.value)}>{ALL_VILLAGES.map(t => <option key={t}>{t}</option>)}</select>
         </Field>
+        <Field label="Sage customer number"><input className="input" disabled={!isAdmin} value={f.sageNo} onChange={e => set('sageNo', e.target.value)} placeholder={isAdmin ? 'e.g. 01-ABC123' : 'Set by management'} /></Field>
         <Field label="Assigned sales rep">
           <select className="input" disabled={!isAdmin} value={f.repId} onChange={e => set('repId', e.target.value)}>
             {(isAdmin ? reps : profiles.filter(p => p.id === user?.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}

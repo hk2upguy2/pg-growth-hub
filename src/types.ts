@@ -85,6 +85,8 @@ export interface Account {
   notes: string
   createdAt: string
   isDemo?: boolean
+  sageNo?: string
+  lastOrderDate?: string | null
 }
 
 export interface Activity {
@@ -176,8 +178,20 @@ export interface RouteVisit {
   createdAt: string
 }
 
+export interface SalesRecord {
+  id: string
+  accountId: string
+  month: string // YYYY-MM
+  brand: string
+  amount: number
+  quantity: number | null
+  lastDate: string | null
+  importedAt: string
+}
+
 export interface DB {
   profiles: Profile[]
+  sales: SalesRecord[]
   accounts: Account[]
   activities: Activity[]
   opportunities: Opportunity[]

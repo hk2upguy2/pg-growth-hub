@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, CompetitorRecord, DB, Opportunity, Profile, Promotion, RoutePlan, RouteVisit,
+  Account, Activity, CompetitorRecord, DB, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
 import { hasSupabase, supabase } from './supabase'
 import { emitSyncError, loadAll, persist, remote } from './db'
 import { nowISO, uid, toDateStr, localDate } from './utils'
 import type { ImportRow } from './importer'
+import { NewSales, deriveAccountUpdates, sageKey } from './sales'
 
 /**
  * DEMO-MODE DATA LAYER (localStorage).
@@ -14,14 +15,14 @@ import type { ImportRow } from './importer'
  * current user's role and every write is checked. In Supabase mode the same rules are enforced by
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
-const EMPTY: DB = { profiles: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
+const EMPTY: DB = { profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
 const KEY = 'pg-growth-hub:db:v1'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
 function load(): DB {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return JSON.parse(raw) as DB
+    if (raw) return { ...EMPTY, ...(JSON.parse(raw) as DB) }
   } catch { /* fall through */ }
   const seed = buildSeed()
   try { localStorage.setItem(KEY, JSON.stringify(seed)) } catch { /* ignore */ }
@@ -64,6 +65,8 @@ interface Ctx {
   addVisitToPlan: (planId: string, accountId: string) => void
   updateRouteVisit: (id: string, patch: Partial<RouteVisit>) => void
   removeRouteVisit: (id: string) => void
+  sales: SalesRecord[]
+  importSales: (recs: NewSales[]) => Promise<{ saved: number; updated: number; activated: number; error?: string }>
   importAccounts: (rows: ImportRow[]) => Promise<{ added: number; failed: number; error?: string }>
   assignAccounts: (ids: string[], repId: string) => void
   saveProfile: (p: Partial<Profile> & { name: string; email: string }) => Profile
@@ -146,13 +149,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---- scoped reads ----
   const scoped = useMemo(() => {
-    if (!user) return { accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] } as Omit<DB, 'profiles'>
+    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
     const myAccounts = db.accounts.filter(a => a.repId === user.id)
     const ids = new Set(myAccounts.map(a => a.id))
     const myPlans = db.routePlans.filter(p => p.repId === user.id)
     const planIds = new Set(myPlans.map(p => p.id))
     return {
+      sales: db.sales.filter(s => ids.has(s.accountId)),
       accounts: myAccounts,
       activities: db.activities.filter(a => a.repId === user.id || ids.has(a.accountId)),
       opportunities: db.opportunities.filter(o => o.repId === user.id || ids.has(o.accountId)),
@@ -187,6 +191,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const u = need()
     const existing = a.id ? db.accounts.find(x => x.id === a.id) : undefined
     if (existing && u.role !== 'admin' && existing.repId !== u.id) throw new Error('Permission denied: account is not assigned to you')
+    const sageNo = u.role === 'admin' && a.sageNo !== undefined ? a.sageNo.trim() : existing?.sageNo ?? ''
+    if (sageNo) {
+      const clash = db.accounts.find(x => x.id !== existing?.id && x.sageNo && sageKey(x.sageNo) === sageKey(sageNo))
+      if (clash) throw new Error(`Sage customer number ${sageNo} is already used by ${clash.name}`)
+    }
     let repId = a.repId ?? existing?.repId ?? u.id
     // reps cannot reassign accounts or create accounts for others
     if (u.role !== 'admin') repId = existing ? existing.repId : u.id
@@ -216,6 +225,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notes: a.notes ?? existing?.notes ?? '',
       createdAt: existing?.createdAt ?? nowISO(),
       isDemo: existing?.isDemo,
+      sageNo,
+      lastOrderDate: existing?.lastOrderDate ?? null,
     }
     setDb(d => ({ ...d, accounts: existing ? d.accounts.map(x => (x.id === full.id ? full : x)) : [...d.accounts, full] }))
     if (hasSupabase) persist(() => remote.saveAccount(full), refresh)
@@ -495,6 +506,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
     return { added, failed: 0 }
   }
+  const importSales: Ctx['importSales'] = async recs => {
+    needAdmin()
+    const stamp = nowISO()
+    const key = (r: { accountId: string; month: string; brand: string }) => `${r.accountId}|${r.month}|${r.brand}`
+    const incoming = new Map<string, SalesRecord>(recs.map(r => [key(r), { ...r, id: uid(), importedAt: stamp }]))
+    // re-importing a month replaces that customer's figure for that month and brand instead of adding to it
+    const merged = [...db.sales.filter(s => !incoming.has(key(s))), ...incoming.values()]
+    const { updated, activated } = deriveAccountUpdates(db.accounts, merged)
+    if (!hasSupabase) {
+      const byId = new Map(updated.map(a => [a.id, a]))
+      setDb(d => ({ ...d, sales: merged, accounts: d.accounts.map(a => byId.get(a.id) ?? a) }))
+      return { saved: incoming.size, updated: updated.length, activated }
+    }
+    try {
+      await remote.saveSales(recs)
+      await remote.upsertAccounts(updated)
+    } catch (e) {
+      await refresh()
+      return { saved: 0, updated: 0, activated: 0, error: e instanceof Error ? e.message : 'Could not save sales' }
+    }
+    await refresh()
+    return { saved: incoming.size, updated: updated.length, activated }
+  }
   const assignAccounts = (ids: string[], repId: string) => {
     needAdmin()
     const set = new Set(ids)
@@ -548,7 +582,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
-    importAccounts, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
+    importAccounts, importSales, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
     updateRouteVisit, removeRouteVisit, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

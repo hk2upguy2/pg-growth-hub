@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
 import ImportAccounts from './pages/ImportAccounts'
+import SalesImport from './pages/SalesImport'
 import AccountDetail from './pages/AccountDetail'
 import Activities from './pages/Activities'
 import Opportunities from './pages/Opportunities'
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/accounts/import" element={isAdmin ? <ImportAccounts /> : <Navigate to="/accounts" replace />} />
+        <Route path="/accounts/sales-update" element={isAdmin ? <SalesImport /> : <Navigate to="/accounts" replace />} />
         <Route path="/accounts/retail" element={<Accounts fixedType="Retail" />} />
         <Route path="/accounts/foodservice" element={<Accounts fixedType="Foodservice" />} />
         <Route path="/accounts/hotel" element={<Accounts fixedType="Hotel" />} />

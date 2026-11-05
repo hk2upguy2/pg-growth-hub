@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  Account, Activity, CompetitorRecord, DB, Opportunity, Profile, Promotion, RoutePlan, RouteVisit,
+  Account, Activity, CompetitorRecord, DB, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 
 /**
@@ -46,6 +46,7 @@ const accountFrom = (r: Row): Account => ({
   monthlyPotential: num(r.monthly_potential), monthlySales: num(r.monthly_sales),
   currentProducts: r.current_products ?? '', potentialProducts: r.potential_products ?? '', competitor: r.competitor ?? '',
   lastVisit: r.last_visit, nextFollowUp: r.next_follow_up, notes: r.notes ?? '', createdAt: r.created_at, isDemo: r.is_demo,
+  sageNo: r.sage_customer_no ?? '', lastOrderDate: r.last_order_date ?? null,
 })
 const accountTo = (a: Account): Row => ({
   id: a.id, name: a.name, type: a.type, segment: a.segment, village: a.village, address: a.address,
@@ -53,7 +54,11 @@ const accountTo = (a: Account): Row => ({
   assigned_rep_id: a.repId || null, priority: a.priority, status: a.status,
   monthly_potential: a.monthlyPotential, monthly_sales: a.monthlySales, current_products: a.currentProducts,
   potential_products: a.potentialProducts, competitor: a.competitor, last_visit: a.lastVisit, next_follow_up: a.nextFollowUp,
-  notes: a.notes, is_demo: !!a.isDemo,
+  notes: a.notes, is_demo: !!a.isDemo, sage_customer_no: a.sageNo?.trim() || null, last_order_date: a.lastOrderDate ?? null,
+})
+const salesFrom = (r: Row): SalesRecord => ({
+  id: r.id, accountId: r.account_id, month: String(r.month).slice(0, 7), brand: r.brand, amount: num(r.amount),
+  quantity: r.quantity == null ? null : num(r.quantity), lastDate: r.last_date ?? null, importedAt: r.imported_at,
 })
 const activityFrom = (r: Row): Activity => ({
   id: r.id, at: r.occurred_at, accountId: r.account_id, repId: r.rep_id, type: r.activity_type, summary: r.summary ?? '',
@@ -110,6 +115,10 @@ export async function loadAll(): Promise<DB> {
     fetchAll<Row>('route_plans'), fetchAll<Row>('route_visits'),
   ])
 
+  // sales_monthly arrives with migration 003; stay usable if it has not been run yet
+  let sales: Row[] = []
+  try { sales = await fetchAll<Row>('sales_monthly', 'month') } catch { sales = [] }
+
   const paths = comps.map(c => c.attachment_path).filter(Boolean) as string[]
   const urls: Record<string, string> = {}
   if (paths.length) {
@@ -118,7 +127,7 @@ export async function loadAll(): Promise<DB> {
   }
 
   return {
-    profiles: profiles.map(profileFrom), accounts: accounts.map(accountFrom), activities: activities.map(activityFrom),
+    profiles: profiles.map(profileFrom), sales: sales.map(salesFrom), accounts: accounts.map(accountFrom), activities: activities.map(activityFrom),
     opportunities: opps.map(oppFrom), promotions: promos.map(p => promoFrom(p, links)), competitors: comps.map(c => compFrom(c, urls)),
     routePlans: plans.map(planFrom), routeVisits: visits.map(visitFrom),
   }
@@ -132,6 +141,20 @@ export const remote = {
     for (let i = 0; i < ids.length; i += 100) {
       const { error } = await sb().from('accounts').update({ assigned_rep_id: repId || null }).in('id', ids.slice(i, i + 100))
       fail('assign accounts', error)
+    }
+  },
+  async upsertAccounts(list: Account[]) {
+    for (let i = 0; i < list.length; i += 100) {
+      const { error } = await sb().from('accounts').upsert(list.slice(i, i + 100).map(accountTo)); fail('update accounts', error)
+    }
+  },
+  async saveSales(list: Omit<SalesRecord, 'id' | 'importedAt'>[]) {
+    const stamp = new Date().toISOString()
+    for (let i = 0; i < list.length; i += 200) {
+      const rows = list.slice(i, i + 200).map(s => ({
+        account_id: s.accountId, month: `${s.month}-01`, brand: s.brand, amount: s.amount, quantity: s.quantity, last_date: s.lastDate, imported_at: stamp,
+      }))
+      const { error } = await sb().from('sales_monthly').upsert(rows, { onConflict: 'account_id,month,brand' }); fail('save sales', error)
     }
   },
   async deleteAccount(id: string) { const { error } = await sb().from('accounts').delete().eq('id', id); fail('delete account', error) },
