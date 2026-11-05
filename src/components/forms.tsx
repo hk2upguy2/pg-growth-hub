@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import {
-  ACCOUNT_TYPES, ALL_VILLAGES, ACTIVITY_TYPES, Account, AccountStatus, AccountType, Activity, ActivityType,
+  ACCOUNT_TYPES, channelAllows, ALL_VILLAGES, ACTIVITY_TYPES, Account, AccountStatus, AccountType, Activity, ActivityType,
   BRANDS, BrandName, Opportunity, PRIORITIES, PRODUCTS, Priority, SEGMENTS, STAGES, STAGE_DEFAULT_PROB, STATUSES, Stage,
 } from '../types'
 import { useStore } from '../lib/store'
@@ -45,7 +45,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
       <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Business name *" className="sm:col-span-2"><input required className="input" value={f.name} onChange={e => set('name', e.target.value)} /></Field>
         <Field label="Account type">
-          <select className="input" value={f.type} onChange={e => set('type', e.target.value as AccountType)}>{ACCOUNT_TYPES.map(t => <option key={t}>{t}</option>)}</select>
+          <select className="input" value={f.type} onChange={e => set('type', e.target.value as AccountType)}>{ACCOUNT_TYPES.filter(t => isAdmin || channelAllows(user?.channel, t)).map(t => <option key={t}>{t}</option>)}</select>
         </Field>
         <Field label="Business segment">
           <select className="input" value={f.segment} onChange={e => set('segment', e.target.value)}>{SEGMENTS.map(t => <option key={t}>{t}</option>)}</select>

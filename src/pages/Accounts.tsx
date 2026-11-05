@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Plus, Search, Upload } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { ACCOUNT_TYPES, ALL_VILLAGES, Account, AccountType, PRIORITIES, STATUSES, territoryOf } from '../types'
 import { AccountForm } from '../components/forms'
-import { Badge, DemoBadge, EmptyState, ExportMenu, PageHeader, useAction } from '../components/ui'
+import { Badge, DemoBadge, EmptyState, ExportMenu, PageHeader, useAction, useToast } from '../components/ui'
 import { daysSince, exportCSV, exportXLS, fmtDate, money } from '../lib/utils'
 import { PRIORITY_ORDER } from '../lib/seed'
 
@@ -24,6 +24,7 @@ export function accountRows(list: Account[], repName: (id: string) => string) {
 export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
   const { accounts, profiles, repName, isAdmin, assignAccounts } = useStore()
   const run = useAction()
+  const toast = useToast()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTo, setAssignTo] = useState('')
   const [q, setQ] = useState('')
@@ -95,10 +96,14 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
           <span className="text-sm font-semibold text-navy-900">{selected.size} selected</span>
           <select id="bulk-rep" className="input !w-auto" value={assignTo} onChange={e => setAssignTo(e.target.value)}>
             <option value="">Choose a rep…</option><option value="__none">Unassign</option>
-            {profiles.filter(p => p.role === 'rep' && p.active).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {profiles.filter(p => p.role === 'rep' && p.active).map(p => <option key={p.id} value={p.id}>{p.name}{p.channel && p.channel !== 'All' ? ` · ${p.channel}` : ''}</option>)}
           </select>
           <button className="btn-primary" disabled={!assignTo}
-            onClick={() => { run(() => assignAccounts([...selected], assignTo === '__none' ? '' : assignTo), `${selected.size} accounts updated`); setSelected(new Set()); setAssignTo('') }}>Assign</button>
+            onClick={() => {
+              const r = run(() => assignAccounts([...selected], assignTo === '__none' ? '' : assignTo))
+              if (r) toast(r.skipped ? `${r.assigned} assigned. ${r.skipped} skipped: that rep's sales channel does not cover those account types.` : `${r.assigned} accounts updated`, r.skipped ? 'err' : undefined)
+              setSelected(new Set()); setAssignTo('')
+            }}>Assign</button>
           <button className="btn-secondary" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
       )}

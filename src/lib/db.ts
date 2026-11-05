@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  Account, Activity, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, Channel, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 
 /**
@@ -37,7 +37,7 @@ type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-expl
 const num = (v: unknown) => Number(v ?? 0)
 
 const profileFrom = (r: Row): Profile => ({
-  id: r.id, name: r.full_name, email: r.email, role: r.role, territory: r.territory, active: r.active, createdAt: r.created_at,
+  id: r.id, name: r.full_name, email: r.email, role: r.role, territory: r.territory, channel: (r.channel ?? 'All') as Channel, active: r.active, createdAt: r.created_at,
 })
 const accountFrom = (r: Row): Account => ({
   id: r.id, accountNo: r.account_no, name: r.name, type: r.type, segment: r.segment ?? 'Other', village: r.village,
@@ -230,7 +230,7 @@ export const remote = {
     fail('mark message read', error)
   },
   async saveProfile(p: Profile) {
-    const { error } = await sb().from('profiles').update({ full_name: p.name, role: p.role, territory: p.territory ?? 'All', active: p.active }).eq('id', p.id)
+    const { error } = await sb().from('profiles').update({ full_name: p.name, role: p.role, territory: p.territory ?? 'All', channel: p.channel ?? 'All', active: p.active }).eq('id', p.id)
     fail('save user', error)
   },
 }

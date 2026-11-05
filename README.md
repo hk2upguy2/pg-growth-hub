@@ -97,3 +97,7 @@ supabase/migrations/    001_schema.sql, 002_rls.sql
 
 Management: Messages, then choose **All sales reps** or **Choose reps** (one or several), write the message, optionally mark it urgent. The Sent list shows how many reps have read each one. Reps see only messages addressed to them or to everyone, with an unread badge in the menu.
 - **Supabase:** run `supabase/migrations/004_messages.sql` **before** deploying this version.
+
+## Sales channels
+
+Under User Management, each rep gets a **Sales channel**: *Retail only*, *Hotel & Foodservice only* (also covers Institutional), or *All accounts*. A Retail rep never sees Hotel or Foodservice accounts, and a Hospitality rep never sees Retail accounts (including their activities, opportunities and sales). Management cannot assign an account to a rep outside that channel; the Assign button skips and reports mismatches. Enforced in Postgres by `supabase/migrations/005_sales_channel.sql` — run it **before** deploying this version.

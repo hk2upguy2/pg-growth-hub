@@ -5,15 +5,16 @@ import {
   CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Menu, X, LogOut, FlaskConical,
 } from 'lucide-react'
 import { useStore } from '../lib/store'
+import { AccountType, channelAllows } from '../types'
 import { hasSupabase } from '../lib/supabase'
 import { cx } from '../lib/utils'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/accounts', label: 'Account Directory', icon: Building2, end: true },
-  { to: '/accounts/retail', label: 'Retail Accounts', icon: ShoppingCart },
-  { to: '/accounts/foodservice', label: 'Foodservice Accounts', icon: UtensilsCrossed },
-  { to: '/accounts/hotel', label: 'Hotel Accounts', icon: Hotel },
+  { to: '/accounts/retail', label: 'Retail Accounts', icon: ShoppingCart, type: 'Retail' },
+  { to: '/accounts/foodservice', label: 'Foodservice Accounts', icon: UtensilsCrossed, type: 'Foodservice' },
+  { to: '/accounts/hotel', label: 'Hotel Accounts', icon: Hotel, type: 'Hotel' },
   { to: '/activities', label: 'Sales Activities', icon: ClipboardList },
   { to: '/opportunities', label: 'Opportunities', icon: Target },
   { to: '/products', label: 'Product Tracking', icon: Package },
@@ -31,7 +32,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const unread = isAdmin ? 0 : messages.filter(m => !messageReads.some(r => r.messageId === m.id && r.userId === user?.id)).length
   return (
     <nav className="px-3 space-y-0.5">
-      {NAV.filter(n => !n.admin || isAdmin).map(n => (
+      {NAV.filter(n => (!n.admin || isAdmin) && (!('type' in n) || isAdmin || channelAllows(user?.channel, n.type as AccountType))).map(n => (
         <NavLink
           key={n.to} to={n.to} end={n.end} onClick={onNavigate}
           className={({ isActive }) => cx(

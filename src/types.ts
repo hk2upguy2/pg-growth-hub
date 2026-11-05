@@ -5,6 +5,12 @@ export type AccountStatus = 'Prospect' | 'Active' | 'Inactive' | 'On Hold'
 export type Territory = 'North' | 'Central' | 'South'
 export type BrandName = 'Agrosuper' | 'Hostess' | 'Kikkoman'
 
+/** Sales channel of a rep: Retail reps work Retail accounts; Hospitality reps work Hotel, Foodservice and Institutional accounts. */
+export type Channel = 'All' | 'Retail' | 'Hospitality'
+export const CHANNELS: Channel[] = ['All', 'Retail', 'Hospitality']
+export const channelOfType = (t: AccountType): 'Retail' | 'Hospitality' => (t === 'Retail' ? 'Retail' : 'Hospitality')
+export const channelAllows = (channel: Channel | undefined, t: AccountType): boolean => !channel || channel === 'All' || channel === channelOfType(t)
+
 export const ACCOUNT_TYPES: AccountType[] = ['Retail', 'Foodservice', 'Hotel', 'Institutional']
 export const PRIORITIES: Priority[] = ['A+', 'A', 'B', 'C']
 export const STATUSES: AccountStatus[] = ['Prospect', 'Active', 'Inactive', 'On Hold']
@@ -56,6 +62,7 @@ export interface Profile {
   email: string
   role: Role
   territory?: Territory | 'All'
+  channel?: Channel
   active: boolean
   createdAt: string
 }

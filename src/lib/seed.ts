@@ -18,9 +18,9 @@ export function buildSeed(): DB {
   const created = new Date(Date.now() - 100 * 86400000).toISOString()
   const profiles: Profile[] = [
     { id: 'u-admin', name: 'Demo Manager', email: 'manager@demo.pg-growth-hub', role: 'admin', territory: 'All', active: true, createdAt: created },
-    { id: 'u-rep1', name: 'Demo Rep A (North)', email: 'rep.a@demo.pg-growth-hub', role: 'rep', territory: 'North', active: true, createdAt: created },
-    { id: 'u-rep2', name: 'Demo Rep B (Central)', email: 'rep.b@demo.pg-growth-hub', role: 'rep', territory: 'Central', active: true, createdAt: created },
-    { id: 'u-rep3', name: 'Demo Rep C (Hospitality)', email: 'rep.c@demo.pg-growth-hub', role: 'rep', territory: 'Central', active: true, createdAt: created },
+    { id: 'u-rep1', name: 'Demo Rep A (North)', email: 'rep.a@demo.pg-growth-hub', role: 'rep', territory: 'North', channel: 'Retail', active: true, createdAt: created },
+    { id: 'u-rep2', name: 'Demo Rep B (Central)', email: 'rep.b@demo.pg-growth-hub', role: 'rep', territory: 'Central', channel: 'Retail', active: true, createdAt: created },
+    { id: 'u-rep3', name: 'Demo Rep C (Hospitality)', email: 'rep.c@demo.pg-growth-hub', role: 'rep', territory: 'Central', channel: 'Hospitality', active: true, createdAt: created },
   ]
 
   type A = Omit<Account, 'id' | 'accountNo' | 'createdAt' | 'notes' | 'isDemo' | 'monthlySales' | 'lastVisit' | 'nextFollowUp'> & {
@@ -273,14 +273,25 @@ export function buildSeed(): DB {
   }
   const derived = deriveAccountUpdates(accounts, sales)
   const dm = new Map(derived.updated.map(a => [a.id, a]))
-  const accountsFinal = accounts.map(a => dm.get(a.id) ?? a)
+  // keep every account with a rep whose sales channel covers it (Retail reps: Retail; Hospitality rep: Hotel/Foodservice/Institutional)
+  const fixRep = (a: Account): Account => {
+    const wantsRetail = a.type === 'Retail'
+    const rep = profiles.find(p => p.id === a.repId)
+    if (rep && (rep.channel === 'All' || (rep.channel === 'Retail') === wantsRetail)) return a
+    return { ...a, repId: wantsRetail ? (territoryOf(a.village) === 'North' ? 'u-rep1' : 'u-rep2') : 'u-rep3' }
+  }
+  const accountsFinal = accounts.map(a => fixRep(dm.get(a.id) ?? a))
+  const repOf = new Map(accountsFinal.map(a => [a.id, a.repId]))
+  activities.forEach(x => { x.repId = repOf.get(x.accountId) ?? x.repId })
+  opportunities.forEach(x => { x.repId = repOf.get(x.accountId) ?? x.repId })
+  const keptVisits = routeVisits.filter(v => routePlans.find(p => p.id === v.planId)?.repId === repOf.get(v.accountId))
 
   const messages: Message[] = [{
     id: 'm-1', senderId: 'u-admin', recipientId: null, subject: 'Welcome to PG Growth Hub (demo message)',
     body: 'This is a sample broadcast to all sales reps. Log every visit the same day and keep next follow-up dates up to date.',
     urgent: false, createdAt: new Date(Date.now() - 86400000).toISOString(),
   }]
-  return { messages, messageReads: [], profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits }
+  return { messages, messageReads: [], profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

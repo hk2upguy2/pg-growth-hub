@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, channelAllows, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
 import { hasSupabase, supabase } from './supabase'
@@ -70,7 +70,7 @@ interface Ctx {
   sales: SalesRecord[]
   importSales: (recs: NewSales[]) => Promise<{ saved: number; updated: number; activated: number; error?: string }>
   importAccounts: (rows: ImportRow[]) => Promise<{ added: number; failed: number; error?: string }>
-  assignAccounts: (ids: string[], repId: string) => void
+  assignAccounts: (ids: string[], repId: string) => { assigned: number; skipped: number }
   sendMessage: (to: string[] | 'all', subject: string, body: string, urgent: boolean) => number
   deleteMessage: (id: string) => void
   markMessagesRead: (ids: string[]) => void
@@ -156,19 +156,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const scoped = useMemo(() => {
     if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
-    const myAccounts = db.accounts.filter(a => a.repId === user.id)
+    const myAccounts = db.accounts.filter(a => a.repId === user.id && channelAllows(user.channel, a.type))
     const ids = new Set(myAccounts.map(a => a.id))
+    const typeOk = (accountId: string) => { const a = db.accounts.find(x => x.id === accountId); return !a || channelAllows(user.channel, a.type) }
+    const mine = (repId: string, accountId: string) => ids.has(accountId) || (repId === user.id && typeOk(accountId))
     const myPlans = db.routePlans.filter(p => p.repId === user.id)
     const planIds = new Set(myPlans.map(p => p.id))
     return {
       sales: db.sales.filter(s => ids.has(s.accountId)),
       accounts: myAccounts,
-      activities: db.activities.filter(a => a.repId === user.id || ids.has(a.accountId)),
-      opportunities: db.opportunities.filter(o => o.repId === user.id || ids.has(o.accountId)),
+      activities: db.activities.filter(a => mine(a.repId, a.accountId)),
+      opportunities: db.opportunities.filter(o => mine(o.repId, o.accountId)),
       promotions: db.promotions.filter(p => p.responsibleId === user.id || p.accountIds.some(i => ids.has(i))),
-      competitors: db.competitors.filter(c => c.repId === user.id || ids.has(c.accountId)),
+      competitors: db.competitors.filter(c => mine(c.repId, c.accountId)),
       routePlans: myPlans,
-      routeVisits: db.routeVisits.filter(v => planIds.has(v.planId)),
+      routeVisits: db.routeVisits.filter(v => planIds.has(v.planId) && ids.has(v.accountId)),
       messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id),
       messageReads: db.messageReads.filter(r => r.userId === user.id),
     }
@@ -206,6 +208,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let repId = a.repId ?? existing?.repId ?? u.id
     // reps cannot reassign accounts or create accounts for others
     if (u.role !== 'admin') repId = existing ? existing.repId : u.id
+    const finalType = a.type ?? existing?.type ?? 'Retail'
+    if (u.role !== 'admin' && !channelAllows(u.channel, finalType)) throw new Error(`Your sales channel is ${u.channel}: you can only work ${u.channel === 'Retail' ? 'Retail' : 'Hotel, Foodservice and Institutional'} accounts`)
+    const owner = repId ? db.profiles.find(p => p.id === repId) : undefined
+    if (owner && owner.role !== 'admin' && !channelAllows(owner.channel, finalType)) throw new Error(`${owner.name} is a ${owner.channel} rep and cannot be given a ${finalType} account`)
     const maxNo = db.accounts.reduce((m, x) => Math.max(m, parseInt(x.accountNo.replace(/\D/g, '')) || 0), 1000)
     const full: Account = {
       id: existing?.id ?? uid(),
@@ -494,7 +500,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     needAdmin()
     const maxNo = db.accounts.reduce((m, x) => Math.max(m, parseInt(x.accountNo.replace(/\D/g, '')) || 0), 1000)
     const stamp = nowISO()
-    const created: Account[] = rows.map((r, i) => ({ ...r, id: uid(), accountNo: `PG-${maxNo + 1 + i}`, createdAt: stamp, isDemo: false }))
+    const created: Account[] = rows.map((r, i) => {
+      const owner = r.repId ? db.profiles.find(p => p.id === r.repId) : undefined
+      const repId = owner && owner.role !== 'admin' && !channelAllows(owner.channel, r.type) ? '' : r.repId   // wrong channel: leave unassigned
+      return { ...r, repId, id: uid(), accountNo: `PG-${maxNo + 1 + i}`, createdAt: stamp, isDemo: false }
+    })
     if (!hasSupabase) {
       setDb(d => ({ ...d, accounts: [...d.accounts, ...created] }))
       return { added: created.length, failed: 0 }
@@ -536,11 +546,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
     return { saved: incoming.size, updated: updated.length, activated }
   }
-  const assignAccounts = (ids: string[], repId: string) => {
+  const assignAccounts: Ctx['assignAccounts'] = (ids, repId) => {
     needAdmin()
-    const set = new Set(ids)
-    setDb(d => ({ ...d, accounts: d.accounts.map(a => (set.has(a.id) ? { ...a, repId } : a)) }))
-    if (hasSupabase) persist(() => remote.assignAccounts(ids, repId), refresh)
+    const rep = repId ? db.profiles.find(p => p.id === repId) : undefined
+    if (repId && !rep) throw new Error('Choose a sales rep')
+    const okIds = ids.filter(id => {
+      const a = db.accounts.find(x => x.id === id)
+      return !!a && (!rep || rep.role === 'admin' || channelAllows(rep.channel, a.type))
+    })
+    const set = new Set(okIds)
+    if (okIds.length) {
+      setDb(d => ({ ...d, accounts: d.accounts.map(a => (set.has(a.id) ? { ...a, repId } : a)) }))
+      if (hasSupabase) persist(() => remote.assignAccounts(okIds, repId), refresh)
+    }
+    return { assigned: okIds.length, skipped: ids.length - okIds.length }
   }
 
   const saveProfile: Ctx['saveProfile'] = p => {
@@ -553,6 +572,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       email: p.email.trim(),
       role: p.role ?? existing?.role ?? 'rep',
       territory: p.territory ?? existing?.territory ?? 'All',
+      channel: p.channel ?? existing?.channel ?? 'All',
       active: p.active ?? existing?.active ?? true,
       createdAt: existing?.createdAt ?? nowISO(),
     }
