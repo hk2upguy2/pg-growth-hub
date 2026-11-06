@@ -1,3 +1,4 @@
+import { channelAllows } from '../types'
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { EmptyState, PageHeader } from '../components/ui'
@@ -8,17 +9,18 @@ import { daysSince, localDate } from '../lib/utils'
 type Row = Record<string, string | number>
 
 export default function Reports() {
-  const { accounts, activities, opportunities, profiles, repName, accountName, isAdmin } = useStore()
+  const { accounts, activities, opportunities, profiles, repName, accountName, isAdmin, user } = useStore()
   const [id, setId] = useState('new-accounts')
   const [months, setMonths] = useState(6)
 
   const reports = useMemo(() => {
     const ms = lastMonths(months)
     const reps = profiles.filter(p => p.role === 'rep' && p.active)
+    const types = (['Retail', 'Foodservice', 'Hotel', 'Institutional'] as const).filter(t => isAdmin || channelAllows(user?.channel, t))
     const R: { id: string; title: string; note?: string; rows: () => Row[] }[] = [
       { id: 'new-accounts', title: 'New accounts acquired', note: 'Accounts created per month, by type', rows: () => ms.map(m => {
         const l = accounts.filter(a => monthKey(a.createdAt) === m)
-        return { Month: monthLabel(m), Total: l.length, Retail: l.filter(a => a.type === 'Retail').length, Foodservice: l.filter(a => a.type === 'Foodservice').length, Hotel: l.filter(a => a.type === 'Hotel').length, Institutional: l.filter(a => a.type === 'Institutional').length }
+        return { Month: monthLabel(m), Total: l.length, ...Object.fromEntries(types.map(t => [t, l.filter(a => a.type === t).length])) }
       }) },
       { id: 'account-activity', title: 'Account activity', note: 'Activity count and last touch per account', rows: () => accounts.map(a => {
         const l = activities.filter(x => x.accountId === a.id)
@@ -38,7 +40,7 @@ export default function Reports() {
         const keys = [...new Set(opportunities.filter(isOpen).map(o => monthKey(o.expectedClose)))].sort()
         return keys.map(k => { const l = opportunities.filter(o => isOpen(o) && monthKey(o.expectedClose) === k); return { 'Expected close month': monthLabel(k), Opportunities: l.length, 'Gross value': l.reduce((s, o) => s + o.monthlyValue, 0), 'Weighted value': Math.round(l.reduce((s, o) => s + weighted(o), 0)) } })
       } },
-      { id: 'retail-vs-fs', title: 'Retail vs foodservice opportunities', rows: () => (['Retail', 'Foodservice', 'Hotel', 'Institutional'] as const).map(t => {
+      { id: 'retail-vs-fs', title: 'Retail vs foodservice opportunities', rows: () => types.map(t => {
         const l = opportunities.filter(o => accounts.find(a => a.id === o.accountId)?.type === t)
         return { 'Account type': t, Opportunities: l.length, 'Open value': l.filter(isOpen).reduce((s, o) => s + o.monthlyValue, 0), Weighted: Math.round(l.reduce((s, o) => s + weighted(o), 0)), Won: l.filter(o => o.stage === 'Won').length }
       }) },

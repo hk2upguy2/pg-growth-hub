@@ -7,7 +7,7 @@ import { useStore } from '../lib/store'
 import { dashboard, followUpsDue, pipelineByStage, staleAccounts } from '../lib/analytics'
 import { Badge, DemoBadge, EmptyState, KPI, PageHeader } from '../components/ui'
 import { daysSince, fmtDate, fmtDateTime, money, moneyShort, monthLabel } from '../lib/utils'
-import type { SalesRecord } from '../types'
+import { channelAllows, type SalesRecord } from '../types'
 
 const PIE = ['#0f2a4a', '#2c5d96', '#7fa3cc', '#b3c9e3']
 
@@ -33,9 +33,9 @@ export default function Dashboard() {
         <KPI label="Total Accounts" value={d.totalAccounts} icon={<Building2 size={18} />} />
         <KPI label="Active Customers" value={d.activeCustomers} hint="Status = Active" icon={<UserCheck size={18} />} tone="green" />
         <KPI label="New Prospects" value={d.prospects} hint="Status = Prospect" icon={<UserPlus size={18} />} />
-        <KPI label="Retail Accounts" value={d.retail} icon={<ShoppingCart size={18} />} />
-        <KPI label="Foodservice Accounts" value={d.foodservice} icon={<UtensilsCrossed size={18} />} />
-        <KPI label="Hotel Accounts" value={d.hotel} icon={<Hotel size={18} />} />
+        {channelAllows(user?.channel, 'Retail') && <KPI label="Retail Accounts" value={d.retail} icon={<ShoppingCart size={18} />} />}
+        {channelAllows(user?.channel, 'Foodservice') && <KPI label="Foodservice Accounts" value={d.foodservice} icon={<UtensilsCrossed size={18} />} />}
+        {channelAllows(user?.channel, 'Hotel') && <KPI label="Hotel Accounts" value={d.hotel} icon={<Hotel size={18} />} />}
         <KPI label="Monthly Sales Potential" value={moneyShort(d.monthlyPotential)} hint={`Actual sales ${moneyShort(d.actualMonthlySales)}/mo`} icon={<DollarSign size={18} />} />
         <KPI label="Opportunity Pipeline" value={moneyShort(d.pipeline.gross)} hint={`Weighted ${moneyShort(d.pipeline.weighted)} · ${d.pipeline.openCount} open`} icon={<Target size={18} />} />
         <KPI label="Visited This Month" value={d.visitedThisMonth} hint={`of ${d.totalAccounts} accounts`} icon={<Footprints size={18} />} />
