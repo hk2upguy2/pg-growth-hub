@@ -18,6 +18,7 @@ export default function Dashboard() {
   const overdue = followUpsDue(activities).sort((a, b) => (a.followUpDate! < b.followUpDate! ? -1 : 1))
   const stale = staleAccounts(accounts, 30).slice(0, 5)
   const lapsed = lapsedAccounts(accounts, 30)
+  const owing = accounts.filter(a => (a.overdueBalance ?? 0) > 0).sort((x, y) => (y.overdueBalance ?? 0) - (x.overdueBalance ?? 0))
   const urgent = unreadMessages(user?.id, messages, messageReads).filter(m => m.urgent)
   const recent = [...activities].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 8)
   const noData = accounts.length === 0
@@ -161,6 +162,18 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {owing.length > 0 && (
+        <div className="card p-4 mb-5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="font-semibold text-navy-900 flex items-center gap-2"><AlertTriangle size={16} className="text-red-600" /> Overdue balances: {money(owing.reduce((n, a) => n + (a.overdueBalance ?? 0), 0))} across {owing.length} customers</h3>
+            <Link className="text-xs text-navy-600 hover:underline" to="/accounts?overdue=1">View all</Link>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Collect before taking new orders.</p>
+          <div className="overflow-x-auto mt-2"><table className="w-full min-w-[480px]"><thead><tr><th className="th">Customer</th><th className="th">Overdue</th><th className="th">Total balance</th>{isAdmin && <th className="th">Rep</th>}</tr></thead>
+            <tbody>{owing.slice(0, 6).map(a => (<tr key={a.id}><td className="td"><Link className="text-navy-700 font-medium hover:underline" to={`/account/${a.id}`}>{a.name}</Link></td><td className="td text-red-700 font-semibold">{money(a.overdueBalance ?? 0)}</td><td className="td">{money(a.balanceDue ?? 0)}</td>{isAdmin && <td className="td">{repName(a.repId)}</td>}</tr>))}</tbody></table></div>
+        </div>
+      )}
 
       <div className="card p-4 mb-5">
         <div className="flex items-center justify-between gap-2 flex-wrap">

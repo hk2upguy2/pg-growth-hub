@@ -120,3 +120,11 @@ Under User Management, each rep gets a **Sales channel**: *Retail only*, *Hotel 
 - **Account view:** next best action, what they buy (3 months vs prior 3), last order, balance owed and active promotions at the top of every account.
 - **Balances:** *Balance owed* and *Overdue balance* can be edited on an account or imported with the customer list.
 - **Supabase:** run `supabase/migrations/007_adoption_security_forecast.sql` **before** deploying this version.
+
+## Photos, offline reading, alerts (v12)
+
+- **Shelf photos:** on the Log visit screen (or any account) tap *Take or choose photo*, pick a type (Shelf survey, Display check, Competitor, Delivery / stock) and optionally a brand and caption. Pictures are shrunk on the phone. *Shelf Photos* in the menu shows every photo with filters (for the Orion shelf survey and Hostess display checks). Stored in a private Supabase bucket.
+- **Offline:** the app keeps the last loaded data on the phone, so accounts can be read without signal, and visits (with photos) are queued and sent on reconnect. Other edits need a connection. Signing out clears the saved copy.
+- **Alerts:** the bell in the menu lists unread messages, follow-ups due, customers who stopped ordering, overdue balances, accepted quotes and (managers) big wins. A morning email digest is available: see `docs/NOTIFICATIONS.md`.
+- **Quotes, price list, balances, commissary and other-island accounts:** see the Quotes, Price List and Account Directory sections.
+- **Supabase:** run `supabase/migrations/008_photos_quotes_markets.sql` **before** deploying this version.

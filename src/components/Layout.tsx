@@ -2,9 +2,10 @@ import { ReactNode, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ShoppingCart, UtensilsCrossed, Hotel, ClipboardList, Target, Package, Route,
-  CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Trophy, Activity as ActivityIcon, ScrollText, LineChart, Menu, X, LogOut, FlaskConical,
+  CalendarDays, Swords, BarChart3, Users, Settings, FileText, Tag, MessageSquare, ShieldCheck, Ship, Trophy, Activity as ActivityIcon, ScrollText, LineChart, Menu, X, LogOut, FlaskConical, Camera, CloudOff,
 } from 'lucide-react'
 import { useStore } from '../lib/store'
+import { NotificationBell } from './NotificationBell'
 import { AccountType, channelAllows } from '../types'
 import { hasSupabase } from '../lib/supabase'
 import { cx } from '../lib/utils'
@@ -17,6 +18,8 @@ const NAV = [
   { to: '/accounts/retail', label: 'Retail Accounts', icon: ShoppingCart, type: 'Retail' },
   { to: '/accounts/foodservice', label: 'Foodservice Accounts', icon: UtensilsCrossed, type: 'Foodservice' },
   { to: '/accounts/hotel', label: 'Hotel Accounts', icon: Hotel, type: 'Hotel' },
+  { to: '/accounts/military', label: 'Commissary & Military', icon: ShieldCheck },
+  { to: '/accounts/islands', label: 'Other Islands', icon: Ship },
   { to: '/activities', label: 'Sales Activities', icon: ClipboardList },
   { to: '/opportunities', label: 'Opportunities', icon: Target },
   { to: '/products', label: 'Product Tracking', icon: Package },
@@ -24,6 +27,9 @@ const NAV = [
   { to: '/promotions', label: 'Promotion Calendar', icon: CalendarDays },
   { to: '/competitors', label: 'Competitor Tracking', icon: Swords },
   { to: '/scorecard', label: 'Scorecard', icon: Trophy },
+  { to: '/photos', label: 'Shelf Photos', icon: Camera },
+  { to: '/quotes', label: 'Quotes', icon: FileText },
+  { to: '/price-list', label: 'Price List', icon: Tag },
   { to: '/forecast', label: 'Forecast', icon: LineChart },
   { to: '/team-activity', label: 'Team Activity', icon: ActivityIcon, admin: true },
   { to: '/messages', label: 'Messages', icon: MessageSquare },
@@ -57,14 +63,17 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 function Brand() {
   return (
     <div className="px-5 py-5">
-      <div className="text-white font-bold text-lg leading-tight">PG Growth Hub</div>
-      <div className="text-navy-300 text-xs">Pacific Grocers · Guam</div>
+      <div className="flex items-start justify-between">
+        <div><div className="text-white font-bold text-lg leading-tight">PG Growth Hub</div>
+          <div className="text-navy-300 text-xs">Pacific Grocers · Guam</div></div>
+        <div className="hidden lg:block -mr-2 -mt-1"><NotificationBell /></div>
+      </div>
     </div>
   )
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, logout } = useStore()
+  const { user, logout, offlineSince } = useStore()
   const [open, setOpen] = useState(false)
   const loc = useLocation()
   return (
@@ -95,7 +104,14 @@ export function Layout({ children }: { children: ReactNode }) {
           <button onClick={() => setOpen(true)} aria-label="Open menu"><Menu /></button>
           <span className="font-semibold">PG Growth Hub</span>
           <span className="ml-auto text-xs text-navy-200 truncate max-w-[40%]">{user?.name}</span>
+          <NotificationBell dark />
         </header>
+        {offlineSince && (
+          <div className="bg-amber-50 border-b border-amber-300 text-amber-900 text-xs px-4 py-2 flex items-center gap-2">
+            <CloudOff size={14} className="shrink-0" />
+            <span><strong>Offline:</strong> showing data saved {new Date(offlineSince).toLocaleString()}. You can look things up and log visits and photos; other changes need a connection.</span>
+          </div>
+        )}
         {!hasSupabase && (
           <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs px-4 py-2 flex items-center gap-2">
             <FlaskConical size={14} className="shrink-0" />

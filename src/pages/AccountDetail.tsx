@@ -1,22 +1,27 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Mail, MapPin, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, FileText, Mail, MapPin, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { AccountForm, ActivityForm, OpportunityForm } from '../components/forms'
 import { Badge, ConfirmButton, DemoBadge, EmptyState, PageHeader, useAction } from '../components/ui'
 import { daysSince, fmtDate, fmtDateTime, money, monthLabel } from '../lib/utils'
 import { territoryOf } from '../types'
 import { pipelineTotals, weighted } from '../lib/analytics'
+import { QuoteBuilder } from '../components/QuoteBuilder'
 import { AccountSnapshot } from '../components/AccountSnapshot'
+import { PhotoGallery } from '../components/PhotoGallery'
+import { PhotoPicker, PendingPhotos, emptyPhotos } from '../components/PhotoPicker'
 
 export default function AccountDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { accounts, activities, opportunities, competitors, promotions, routeVisits, routePlans, repName, isAdmin, sales, deleteAccount, completeFollowUp, deleteActivity } = useStore()
+  const { accounts, activities, opportunities, competitors, promotions, routeVisits, routePlans, repName, isAdmin, sales, photos, addPhotos, deleteAccount, completeFollowUp, deleteActivity } = useStore()
   const run = useAction()
   const [edit, setEdit] = useState(false)
   const [logging, setLogging] = useState(false)
   const [oppOpen, setOppOpen] = useState(false)
+  const [shots, setShots] = useState<PendingPhotos>(emptyPhotos())
+  const [quoting, setQuoting] = useState(false)
   const a = accounts.find(x => x.id === id)
   if (!a) return <div className="card p-8"><EmptyState title="Account not found or not assigned to you" /><div className="text-center"><Link className="btn-secondary" to="/accounts">Back to directory</Link></div></div>
 
@@ -40,6 +45,7 @@ export default function AccountDetail() {
         actions={<>
           <button className="btn-secondary" onClick={() => setLogging(true)}><Plus size={16} /> Log activity</button>
           <button className="btn-secondary" onClick={() => setOppOpen(true)}><Plus size={16} /> Opportunity</button>
+          <button className="btn-secondary" onClick={() => setQuoting(true)}><FileText size={16} /> Quote</button>
           <button className="btn-primary" onClick={() => setEdit(true)}><Pencil size={16} /> Edit</button>
           {isAdmin && <ConfirmButton message={`Delete ${a.name} and all its activities, opportunities and competitor records?`} onConfirm={() => { if (run(() => deleteAccount(a.id), 'Account deleted') !== undefined || true) nav('/accounts') }}><Trash2 size={16} /> Delete</ConfirmButton>}
         </>}
@@ -145,6 +151,16 @@ export default function AccountDetail() {
           {comp.map(c => <div key={c.id} className="text-sm border-b border-slate-100 py-2 last:border-0"><div className="font-medium">{c.competitor} <span className="text-xs text-slate-500">· {fmtDate(c.recordedAt)}</span></div><div className="text-slate-600">{c.products} {c.price && `· ${c.price}`}</div><div className="text-xs text-slate-500">{c.observations}</div></div>)}
           {comp.length === 0 && <div className="text-sm text-slate-500">None recorded.</div>}</div>
       </div>
+      <div className="card p-4 mb-4">
+        <h3 className="font-semibold text-navy-900 mb-3">Shelf &amp; display photos</h3>
+        {photos.filter(p => p.accountId === a.id).length === 0 && <p className="text-sm text-slate-500 mb-3">No photos yet.</p>}
+        <PhotoGallery photos={photos.filter(p => p.accountId === a.id).sort((x, y) => y.takenAt.localeCompare(x.takenAt))} />
+        <div className="mt-4 border-t border-slate-200 pt-3 max-w-md">
+          <PhotoPicker value={shots} onChange={setShots} />
+          {shots.shots.length > 0 && <button className="btn-primary mt-3" onClick={() => { run(() => addPhotos(shots.shots.map(dataUrl => ({ accountId: a.id, tag: shots.tag, brand: shots.brand || null, caption: shots.caption, dataUrl }))), 'Photos saved'); setShots(emptyPhotos()) }}>Save {shots.shots.length} photo{shots.shots.length > 1 ? 's' : ''}</button>}
+        </div>
+      </div>
+
       <div className="card mt-4 mb-4">
         <h3 className="font-semibold text-navy-900 px-4 pt-4">Sales from Sage</h3>
         <div className="overflow-x-auto">

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
 import ImportAccounts from './pages/ImportAccounts'
+import BalanceImport from './pages/BalanceImport'
 import SalesImport from './pages/SalesImport'
 import AccountDetail from './pages/AccountDetail'
 import Activities from './pages/Activities'
@@ -13,9 +14,12 @@ import Products from './pages/Products'
 import RoutePlanner from './pages/RoutePlanner'
 import Promotions from './pages/Promotions'
 import Competitors from './pages/Competitors'
+import Quotes from './pages/Quotes'
+import PriceList from './pages/PriceList'
 import Forecast from './pages/Forecast'
 import TeamActivity from './pages/TeamActivity'
 import AuditLog from './pages/AuditLog'
+import Photos from './pages/Photos'
 import Scorecard from './pages/Scorecard'
 import Messages from './pages/Messages'
 import Reports from './pages/Reports'
@@ -33,9 +37,12 @@ export default function App() {
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/accounts/import" element={isAdmin ? <ImportAccounts /> : <Navigate to="/accounts" replace />} />
         <Route path="/accounts/sales-update" element={isAdmin ? <SalesImport /> : <Navigate to="/accounts" replace />} />
+        <Route path="/accounts/balances-update" element={isAdmin ? <BalanceImport /> : <Navigate to="/accounts" replace />} />
         <Route path="/accounts/retail" element={<Accounts fixedType="Retail" />} />
         <Route path="/accounts/foodservice" element={<Accounts fixedType="Foodservice" />} />
         <Route path="/accounts/hotel" element={<Accounts fixedType="Hotel" />} />
+        <Route path="/accounts/military" element={<Accounts fixedMarket="Military" />} />
+        <Route path="/accounts/islands" element={<Accounts fixedMarket="Other Island" />} />
         <Route path="/account/:id" element={<AccountDetail />} />
         <Route path="/activities" element={<Activities />} />
         <Route path="/opportunities" element={<Opportunities />} />
@@ -43,6 +50,9 @@ export default function App() {
         <Route path="/routes" element={<RoutePlanner />} />
         <Route path="/promotions" element={<Promotions />} />
         <Route path="/competitors" element={<Competitors />} />
+        <Route path="/photos" element={<Photos />} />
+        <Route path="/quotes" element={<Quotes />} />
+        <Route path="/price-list" element={<PriceList />} />
         <Route path="/forecast" element={<Forecast />} />
         <Route path="/team-activity" element={isAdmin ? <TeamActivity /> : <Navigate to="/" replace />} />
         <Route path="/audit" element={isAdmin ? <AuditLog /> : <Navigate to="/" replace />} />

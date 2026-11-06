@@ -11,6 +11,12 @@ export const CHANNELS: Channel[] = ['All', 'Retail', 'Hospitality']
 export const channelOfType = (t: AccountType): 'Retail' | 'Hospitality' => (t === 'Retail' ? 'Retail' : 'Hospitality')
 export const channelAllows = (channel: Channel | undefined, t: AccountType): boolean => !channel || channel === 'All' || channel === channelOfType(t)
 
+/** Where the customer is. Guam accounts use villages and routes; commissary and other-island customers are worked by phone, visit trips and shipments. */
+export type Market = 'Guam' | 'Military' | 'Other Island'
+export const MARKETS: Market[] = ['Guam', 'Military', 'Other Island']
+export const ISLANDS = ['Saipan', 'Tinian', 'Rota', 'Palau', 'Yap', 'Chuuk', 'Pohnpei', 'Kosrae', 'Marshall Islands', 'Other'] as const
+export const marketOf = (a: { market?: Market }): Market => a.market ?? 'Guam'
+
 export const ACCOUNT_TYPES: AccountType[] = ['Retail', 'Foodservice', 'Hotel', 'Institutional']
 export const PRIORITIES: Priority[] = ['A+', 'A', 'B', 'C']
 export const STATUSES: AccountStatus[] = ['Prospect', 'Active', 'Inactive', 'On Hold']
@@ -110,6 +116,9 @@ export interface Account {
   isDemo?: boolean
   sageNo?: string
   lastOrderDate?: string | null
+  market?: Market
+  island?: string
+  balanceUpdated?: string | null
   balanceDue?: number
   overdueBalance?: number
 }
@@ -244,12 +253,41 @@ export interface RepTarget {
   visitsTarget: number
   newAccountsTarget: number
 }
+export interface PriceItem { id: string; brand: BrandName; product: string; sku: string; unit: string; price: number; active: boolean; updatedAt: string }
+export type QuoteStatus = 'Draft' | 'Sent' | 'Accepted' | 'Declined'
+export const QUOTE_STATUSES: QuoteStatus[] = ['Draft', 'Sent', 'Accepted', 'Declined']
+export interface QuoteLine { brand: BrandName; product: string; sku: string; unit: string; qty: number; price: number; discountPct: number }
+export const lineTotal = (l: QuoteLine) => Math.round(l.qty * l.price * (1 - l.discountPct / 100) * 100) / 100
+export const quoteTotal = (lines: QuoteLine[]) => Math.round(lines.reduce((n, l) => n + lineTotal(l), 0) * 100) / 100
+/** Reps may discount up to this much; anything higher needs management. */
+export const MAX_REP_DISCOUNT = 10
+export interface Quote {
+  id: string; quoteNo: string; accountId: string; repId: string; status: QuoteStatus; validUntil: string; notes: string
+  lines: QuoteLine[]; total: number; activityId?: string | null; opportunityId?: string | null; createdAt: string
+}
+export const PHOTO_TAGS = ['Shelf survey', 'Display check', 'Competitor', 'Delivery / stock', 'Other'] as const
+export type PhotoTag = (typeof PHOTO_TAGS)[number]
+export interface Photo {
+  id: string
+  accountId: string
+  activityId?: string | null
+  repId: string
+  tag: PhotoTag
+  brand?: BrandName | null
+  caption: string
+  takenAt: string
+  url: string   // data URL in demo mode, short-lived signed URL with Supabase
+  path?: string // storage path (Supabase)
+}
 export interface MessageRead { messageId: string; userId: string; readAt: string }
 
 export interface DB {
   messages: Message[]
   messageReads: MessageRead[]
   targets: RepTarget[]
+  priceItems: PriceItem[]
+  quotes: Quote[]
+  photos: Photo[]
   audit: AuditEntry[]
   profiles: Profile[]
   sales: SalesRecord[]

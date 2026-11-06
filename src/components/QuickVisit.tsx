@@ -1,3 +1,4 @@
+import { OverdueWarning } from './AccountSnapshot'
 import { useEffect, useMemo, useState } from 'react'
 import { CloudOff, Plus } from 'lucide-react'
 import { useStore } from '../lib/store'
@@ -5,17 +6,18 @@ import { Modal, useToast } from './ui'
 import { daysFromNowStr, nowISO } from '../lib/utils'
 import { hasSupabase } from '../lib/supabase'
 import { PRIORITY_ORDER } from '../lib/seed'
+import { PhotoPicker, PendingPhotos, emptyPhotos } from './PhotoPicker'
 
 const OUTCOMES = ['Order placed', 'Interested', 'Wants quotation', 'Needs follow-up', 'Not interested', 'Not available']
 const QUEUE_KEY = 'pg-growth-hub:visit-queue:v1'
-type Queued = { accountId: string; summary: string; outcome: string; followUpDate: string | null; at: string }
+type Queued = { accountId: string; summary: string; outcome: string; followUpDate: string | null; at: string; photos?: PendingPhotos }
 
 const readQueue = (): Queued[] => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]') } catch { return [] } }
 const writeQueue = (q: Queued[]) => { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)) } catch { /* ignore */ } }
 
 /** Floating "Log visit" button (reps and managers) and the offline queue that sends waiting visits when the connection returns. */
 export function QuickVisit({ preselect }: { preselect?: string }) {
-  const { accounts, saveActivity, user } = useStore()
+  const { accounts, saveActivity, addPhotos, user } = useStore()
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(() => readQueue().length)
@@ -27,7 +29,11 @@ export function QuickVisit({ preselect }: { preselect?: string }) {
     writeQueue([])
     let sent = 0; const failed: Queued[] = []
     for (const v of q) {
-      try { saveActivity({ accountId: v.accountId, at: v.at, type: 'Customer Visit', summary: v.summary, outcome: v.outcome, followUpDate: v.followUpDate, followUpDone: false }); sent++ }
+      try {
+        const act = saveActivity({ accountId: v.accountId, at: v.at, type: 'Customer Visit', summary: v.summary, outcome: v.outcome, followUpDate: v.followUpDate, followUpDone: false })
+        if (v.photos?.shots.length) addPhotos(v.photos.shots.map(dataUrl => ({ accountId: v.accountId, activityId: act.id, tag: v.photos!.tag, brand: v.photos!.brand || null, caption: v.photos!.caption, dataUrl })))
+        sent++
+      }
       catch { failed.push(v) }
     }
     writeQueue(failed); setPending(failed.length)
@@ -59,8 +65,9 @@ export function QuickVisit({ preselect }: { preselect?: string }) {
 }
 
 function QuickVisitModal({ preselect, offline, onClose, onQueued }: { preselect?: string; offline: boolean; onClose: () => void; onQueued: () => void }) {
-  const { accounts, saveActivity } = useStore()
+  const { accounts, saveActivity, addPhotos } = useStore()
   const toast = useToast()
+  const [photos, setPhotos] = useState<PendingPhotos>(emptyPhotos())
   const [q, setQ] = useState('')
   const [accountId, setAccountId] = useState(preselect ?? '')
   const [outcome, setOutcome] = useState('')
@@ -77,13 +84,15 @@ function QuickVisitModal({ preselect, offline, onClose, onQueued }: { preselect?
 
   const save = () => {
     if (!accountId || !outcome) return
-    const payload: Queued = { accountId, summary: note.trim() || `Visit: ${outcome}`, outcome, followUpDate: follow === null ? null : daysFromNowStr(follow), at: nowISO() }
+    const payload: Queued = { accountId, summary: note.trim() || `Visit: ${outcome}`, outcome, followUpDate: follow === null ? null : daysFromNowStr(follow), at: nowISO(), photos: photos.shots.length ? photos : undefined }
     if (offline) {
-      writeQueue([...readQueue(), payload]); onQueued(); toast('Saved on this phone. It will send when you are back online.'); onClose(); return
+      try { localStorage.setItem(QUEUE_KEY, JSON.stringify([...readQueue(), payload])) } catch { toast('Not enough space on this phone for these photos. Remove some and try again.', 'err'); return }
+      ; onQueued(); toast('Saved on this phone. It will send when you are back online.'); onClose(); return
     }
     try {
-      saveActivity({ accountId, at: payload.at, type: 'Customer Visit', summary: payload.summary, outcome, nextAction: follow === null ? '' : 'Follow up', followUpDate: payload.followUpDate, followUpDone: false })
-      toast('Visit logged'); onClose()
+      const act = saveActivity({ accountId, at: payload.at, type: 'Customer Visit', summary: payload.summary, outcome, nextAction: follow === null ? '' : 'Follow up', followUpDate: payload.followUpDate, followUpDone: false })
+      if (photos.shots.length) addPhotos(photos.shots.map(dataUrl => ({ accountId, activityId: act.id, tag: photos.tag, brand: photos.brand || null, caption: photos.caption, dataUrl })))
+      toast(photos.shots.length ? `Visit logged with ${photos.shots.length} photo${photos.shots.length > 1 ? 's' : ''}` : 'Visit logged'); onClose()
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'err') }
   }
 
@@ -106,6 +115,7 @@ function QuickVisitModal({ preselect, offline, onClose, onQueued }: { preselect?
             )}
           </div>
         )}
+        <OverdueWarning account={picked} />
         {preselect && picked && <div className="rounded-lg border border-navy-300 bg-navy-50 px-3 py-2 font-medium text-navy-900">{picked.name}</div>}
         <div>
           <div className="label">How did it go?</div>
@@ -117,6 +127,7 @@ function QuickVisitModal({ preselect, offline, onClose, onQueued }: { preselect?
             {([[null, 'None'], [1, 'Tomorrow'], [7, 'In 1 week'], [14, 'In 2 weeks']] as [number | null, string][]).map(([d, l]) => <button key={l} type="button" onClick={() => setFollow(d)} className={follow === d ? 'btn-primary' : 'btn-secondary'}>{l}</button>)}
           </div>
         </div>
+        <PhotoPicker value={photos} onChange={setPhotos} />
         <div><div className="label">Note (optional)</div><textarea rows={2} className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Anything worth remembering" /></div>
         {offline && <div className="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">You are offline. This visit will be saved on your phone and sent automatically when you are back online.</div>}
         <div className="flex justify-end gap-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={!accountId || !outcome} onClick={save}>Save visit</button></div>

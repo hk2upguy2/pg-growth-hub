@@ -1,5 +1,5 @@
 import {
-  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, RepTarget, Opportunity, Priority, Profile,
+  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, PriceItem, RepTarget, Opportunity, Priority, Profile,
   PRODUCTS, Promotion, SalesRecord, RoutePlan, RouteVisit, Stage, STAGE_DEFAULT_PROB, territoryOf,
 } from '../types'
 import { deriveAccountUpdates } from './sales'
@@ -230,6 +230,17 @@ export function buildSeed(): DB {
     }
   }
 
+  // ---- a few commissary / military and other-island customers (illustrative) ----
+  const ISL = ['Saipan', 'Tinian', 'Rota', 'Palau', 'Saipan', 'Yap']
+  let mil = 0, isl = 0
+  const takeFor = (segs: string[], max: number, f: (a: Account) => void) => { let n = 0; for (const a of accounts) { if (n >= max) break; if (a.id.startsWith('a-g') && !a.market && segs.includes(a.segment)) { f(a); n++ } } }
+  takeFor(['Supermarket'], 2, a => { a.market = 'Military'; a.name = `${a.name.split(' ')[0]} Base Commissary ${++mil} (Demo)` })
+  takeFor(['Institutional'], 1, a => { a.market = 'Military'; a.name = `${a.name.split(' ')[0]} Base Dining Facility ${++mil} (Demo)` })
+  takeFor(['Convenience Store'], 1, a => { a.market = 'Military'; a.name = `${a.name.split(' ')[0]} Base Exchange Mart ${++mil} (Demo)` })
+  for (const segs of [['Supermarket'], ['Convenience Store'], ['Resort Hotel'], ['Restaurant', 'Chicken Restaurant'], ['Institutional']]) {
+    takeFor(segs, segs[0] === 'Convenience Store' || segs[0] === 'Resort Hotel' ? 2 : 1, a => { a.market = 'Other Island'; a.island = ISL[isl++ % ISL.length]; a.name = a.name.replace(' (Demo)', ` ${a.island} (Demo)`) })
+  }
+
   // ---- Generated sales history: 6 months per buying account, different for every account ----
   const sales: SalesRecord[] = []
   const monthKey = (back: number) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - back); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -312,7 +323,16 @@ export function buildSeed(): DB {
   // demo: staggered "last opened the app" times so the Team Activity page has something to show
   const seen: Record<string, number> = { 'u-rep1': 0.2, 'u-rep2': 2, 'u-rep3': 5 }
   const profilesOut = profiles.map(p => (p.id in seen ? { ...p, lastSeen: new Date(Date.now() - seen[p.id] * 86400000).toISOString() } : p))
-  return { audit: [], targets, messages, messageReads: [], profiles: profilesOut, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
+  // ILLUSTRATIVE price list (placeholder prices, not Pacific Grocers' real prices) so quoting can be tried in demo mode
+  const stampP = new Date().toISOString()
+  const priceItems: PriceItem[] = ([
+    ['Agrosuper', 'Party Wings', 'AGR-PW', 'case', 46], ['Agrosuper', 'Drummettes', 'AGR-DR', 'case', 48], ['Agrosuper', 'Chicken Breast', 'AGR-CB', 'case', 62],
+    ['Agrosuper', 'Leg Quarters', 'AGR-LQ', 'case', 34], ['Agrosuper', 'Whole Chicken', 'AGR-WC', 'case', 40], ['Agrosuper', 'Thighs', 'AGR-TH', 'case', 44],
+    ['Hostess', 'Twinkies 10ct', 'HOS-TW10', 'case', 38], ['Hostess', 'Donettes', 'HOS-DN', 'case', 36], ['Hostess', 'CupCakes', 'HOS-CC', 'case', 37],
+    ['Kikkoman', 'Soy Sauce', 'KIK-SS', 'case', 52], ['Kikkoman', 'Teriyaki Sauce', 'KIK-TS', 'case', 55], ['Kikkoman', 'Foodservice Soy Sauce', 'KIK-FS', 'case', 68],
+    ['OxKing', 'Corned Beef', 'OXK-CB', 'case', 58], ['Pampeano', 'Corned Beef', 'PAM-CB', 'case', 56], ['Orion', 'Choco Pie', 'ORI-CP', 'case', 41],
+  ] as [PriceItem['brand'], string, string, string, number][]).map(([brand, product, sku, unit, price], i) => ({ id: `pi-${i + 1}`, brand, product, sku, unit, price, active: true, updatedAt: stampP }))
+  return { photos: [], priceItems, quotes: [], audit: [], targets, messages, messageReads: [], profiles: profilesOut, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

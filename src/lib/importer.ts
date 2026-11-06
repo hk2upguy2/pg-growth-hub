@@ -1,5 +1,5 @@
 import { sageKey } from './sales'
-import { ACCOUNT_TYPES, ALL_VILLAGES, Account, AccountStatus, AccountType, PRIORITIES, Priority, SEGMENTS, STATUSES } from '../types'
+import { ACCOUNT_TYPES, ALL_VILLAGES, Account, ISLANDS, Market, AccountStatus, AccountType, PRIORITIES, Priority, SEGMENTS, STATUSES } from '../types'
 
 export type ImportRow = Omit<Account, 'id' | 'accountNo' | 'createdAt' | 'isDemo'>
 
@@ -20,6 +20,8 @@ export const FIELDS: FieldDef[] = [
   { key: 'priority', label: 'Priority (A+, A, B, C)', aliases: ['priority', 'account priority', 'rank'] },
   { key: 'status', label: 'Status', aliases: ['status', 'account status'] },
   { key: 'monthlyPotential', label: 'Est. monthly potential ($)', aliases: ['monthly potential', 'estimated monthly potential', 'potential', 'est monthly potential'] },
+  { key: 'market', label: 'Market (Guam / Military / Other Island)', aliases: ['market', 'region', 'account group', 'customer group', 'area group'] },
+  { key: 'island', label: 'Island (other-island customers)', aliases: ['island', 'island name'] },
   { key: 'balanceDue', label: 'Balance owed ($)', aliases: ['balance', 'balance due', 'ar balance', 'amount owed', 'total balance', 'outstanding'] },
   { key: 'overdueBalance', label: 'Overdue balance ($)', aliases: ['overdue', 'past due', 'overdue balance', 'past due balance', 'amount overdue'] },
   { key: 'monthlySales', label: 'Actual monthly sales ($)', aliases: ['monthly sales', 'actual monthly sales', 'sales'] },
@@ -199,9 +201,17 @@ export function prepare(
     if (!type && segment) type = typeFromSegment(segment)
     if (!type) { type = settings.defaultType; warnings.push(typeRaw ? `Type “${typeRaw}” not recognised, used ${type}` : `No type, used ${type}`) }
 
+    // market: Guam, Military / Commissary, or Other Island
+    const mkText = `${get('market')} ${get('island')} ${get('village')} ${get('name')}`.toLowerCase()
+    const islandHit = ISLANDS.find(i => i !== 'Other' && mkText.includes(i.toLowerCase())) ?? (/\b(majuro|ebeye|kwajalein)\b/.test(mkText) ? 'Marshall Islands' : undefined)
+    const market: Market = (/commissary|military|\bdod\b|navy|air force/.test(get('market').toLowerCase()) || /commissary|\bnex\b|andersen|naval base|air force base/.test(get('name').toLowerCase())) ? 'Military'
+      : islandHit || /other island|off.?island/.test(get('market').toLowerCase()) ? 'Other Island' : 'Guam'
+    const island = market === 'Other Island' ? (get('island') && ISLANDS.find(i => i.toLowerCase() === get('island').toLowerCase())) || islandHit || 'Other' : ''
+
     // village
     const villRaw = get('village')
     let village = normVillage(villRaw)
+    if (!village && market !== 'Guam') village = 'Other Southern Village'
     if (!village) {
       village = 'Other Southern Village'
       if (villRaw) { addNote(`Village (as imported): ${villRaw}`); warnings.push(`Village “${villRaw}” not in the Guam list, set to Other Southern Village`) }
@@ -238,7 +248,7 @@ export function prepare(
     const data: ImportRow | null = errors.length ? null : {
       name, sageNo, type, segment: segment ?? 'Other', village, address,
       contactName: get('contactName'), contactPosition: get('contactPosition'), phone: get('phone'), email: get('email'),
-      repId, priority, status,
+      repId, priority, status, market, island,
       monthlyPotential: money(get('monthlyPotential')), monthlySales: money(get('monthlySales')), balanceDue: money(get('balanceDue')), overdueBalance: money(get('overdueBalance')),
       currentProducts: get('currentProducts'), potentialProducts: get('potentialProducts'), competitor: get('competitor'),
       lastVisit: null, nextFollowUp: null, notes,

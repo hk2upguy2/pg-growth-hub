@@ -73,3 +73,14 @@ export function AccountSnapshot({ a, sales, acts, opps, promotions }: { a: Accou
     </div>
   )
 }
+
+/** Shown wherever a rep is about to take an order or quote for a customer who owes overdue money. */
+export function OverdueWarning({ account }: { account?: Account }) {
+  if (!account || (account.overdueBalance ?? 0) <= 0) return null
+  return (
+    <div className="rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm px-3 py-2 flex items-start gap-2">
+      <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+      <div><strong>{account.name} has {money(account.overdueBalance ?? 0)} overdue</strong> (balance {money(account.balanceDue ?? 0)}{account.balanceUpdated ? `, as of ${fmtDate(account.balanceUpdated)}` : ''}). Check with management before taking a new order.</div>
+    </div>
+  )
+}

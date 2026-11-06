@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, channelAllows, CompetitorRecord, AuditEntry, DB, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, BrandName, channelAllows, CompetitorRecord, Photo, PhotoTag, AuditEntry, DB, Message, MessageRead, PriceItem, Quote, QuoteLine, MAX_REP_DISCOUNT, quoteTotal, STAGE_DEFAULT_PROB, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
 import { mfaConfirm, mfaNeeded } from './mfa'
+import { dataUrlToBlob } from './photos'
 import { hasSupabase, supabase } from './supabase'
 import { emitSyncError, loadAll, persist, remote } from './db'
-import { nowISO, uid, toDateStr, localDate } from './utils'
+import { nowISO, uid, toDateStr, localDate , todayStr } from './utils'
 import type { ImportRow } from './importer'
 import { NewSales, deriveAccountUpdates, sageKey } from './sales'
 
@@ -16,7 +17,29 @@ import { NewSales, deriveAccountUpdates, sageKey } from './sales'
  * current user's role and every write is checked. In Supabase mode the same rules are enforced by
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
-const EMPTY: DB = { messages: [], messageReads: [], targets: [], audit: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
+/** Last good copy of the data, so the app still opens and can be read without signal (Supabase mode). */
+const CACHE_KEY = 'pg-growth-hub:cache:v1'
+async function cacheOwner(): Promise<string | null> { try { return (await supabase?.auth.getSession())?.data.session?.user.id ?? null } catch { return null } }
+async function saveCache(data: DB) {
+  const owner = await cacheOwner(); if (!owner) return
+  const slim = (d: DB) => ({ ...d, audit: [], photos: d.photos.map(p => ({ ...p, url: '' })) })
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ owner, at: new Date().toISOString(), db: slim(data) })) }
+  catch {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ owner, at: new Date().toISOString(), db: { ...slim(data), activities: data.activities.slice(-400), sales: data.sales.slice(-4000) } })) }
+    catch { try { localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ } }
+  }
+}
+async function readCache(): Promise<{ at: string; db: DB } | null> {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null')
+    const owner = await cacheOwner()
+    return c && owner && c.owner === owner ? { at: c.at, db: { ...EMPTY, ...c.db } } : null
+  } catch { return null }
+}
+// signing out must not leave one person's customer data in the browser for the next
+export const clearOfflineCache = () => { try { localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ } }
+
+const EMPTY: DB = { photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
 const KEY = 'pg-growth-hub:db:v2'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
@@ -34,6 +57,7 @@ interface Ctx {
   user: Profile | null
   isAdmin: boolean
   loading: boolean
+  offlineSince: string | null
   mfaPending: boolean
   verifyMfa: (code: string) => Promise<string | null>
   login: (userId: string) => void
@@ -52,6 +76,9 @@ interface Ctx {
   messages: Message[]
   messageReads: MessageRead[]
   targets: RepTarget[]
+  priceItems: PriceItem[]
+  quotes: Quote[]
+  photos: Photo[]
   audit: AuditEntry[]
   repName: (id: string) => string
   accountName: (id: string) => string
@@ -73,6 +100,13 @@ interface Ctx {
   updateRouteVisit: (id: string, patch: Partial<RouteVisit>) => void
   removeRouteVisit: (id: string) => void
   sales: SalesRecord[]
+  savePriceItems: (items: (Omit<PriceItem, 'id' | 'updatedAt'> & { id?: string })[]) => number
+  deletePriceItem: (id: string) => void
+  saveQuote: (q: { id?: string; accountId: string; status: Quote['status']; validUntil: string; notes: string; lines: QuoteLine[]; declineReason?: string }) => Quote
+  deleteQuote: (id: string) => void
+  addPhotos: (items: { accountId: string; activityId?: string | null; tag: PhotoTag; brand?: BrandName | null; caption?: string; dataUrl: string }[]) => number
+  deletePhoto: (id: string) => void
+  importBalances: (rows: { accountId: string; balance: number; overdue: number }[]) => Promise<{ updated: number; overdueTotal: number }>
   importSales: (recs: NewSales[]) => Promise<{ saved: number; updated: number; activated: number; error?: string }>
   importAccounts: (rows: ImportRow[]) => Promise<{ added: number; failed: number; error?: string }>
   assignAccounts: (ids: string[], repId: string) => { assigned: number; skipped: number }
@@ -101,6 +135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   })
   const [loading, setLoading] = useState(hasSupabase)
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
+  const [offlineSince, setOfflineSince] = useState<string | null>(null)
 
   useEffect(() => {
     if (hasSupabase) return
@@ -109,8 +144,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   /** Supabase mode: reload everything this user is allowed to see (row-level security does the filtering). */
   const refresh = useCallback(async () => {
-    try { setDb(await loadAll()) } catch (e) { emitSyncError(e instanceof Error ? e.message : 'Could not load data') }
+    try {
+      const data = await loadAll()
+      setDb(data); setOfflineSince(null)
+      void saveCache(data)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not load data'
+      const cached = !navigator.onLine || /fetch|network|load failed/i.test(msg) ? await readCache() : null
+      if (cached) { setDb(cached.db); setOfflineSince(cached.at) } else emitSyncError(msg)
+    }
   }, [])
+  // when the connection returns, load fresh data
+  useEffect(() => {
+    if (!hasSupabase) return
+    const up = () => { void refresh() }
+    window.addEventListener('online', up)
+    return () => window.removeEventListener('online', up)
+  }, [refresh])
 
   useEffect(() => {
     if (!supabase) return
@@ -177,14 +227,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return null
   }, [])
   const logout = useCallback(() => {
-    if (supabase) { void supabase.auth.signOut(); return }
+    if (supabase) { clearOfflineCache(); void supabase.auth.signOut(); return }
     setUserId(null)
     try { localStorage.removeItem(USER_KEY) } catch { /* ignore */ }
   }, [])
 
   // ---- scoped reads ----
   const scoped = useMemo(() => {
-    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [], targets: [], audit: [] } as Omit<DB, 'profiles'>
+    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
     const myAccounts = db.accounts.filter(a => a.repId === user.id && channelAllows(user.channel, a.type))
     const ids = new Set(myAccounts.map(a => a.id))
@@ -203,6 +253,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       routeVisits: db.routeVisits.filter(v => planIds.has(v.planId) && ids.has(v.accountId)),
       messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id || m.senderId === user.id),
       targets: db.targets.filter(t => t.repId === user.id),
+      priceItems: db.priceItems.filter(p => p.active),
+      quotes: db.quotes.filter(q => q.repId === user.id && ids.has(q.accountId)),
+      photos: db.photos.filter(p => ids.has(p.accountId)),
       audit: [],
       messageReads: db.messageReads.filter(r => r.userId === user.id),
     }
@@ -286,6 +339,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isDemo: existing?.isDemo,
       sageNo,
       lastOrderDate: existing?.lastOrderDate ?? null,
+      market: a.market ?? existing?.market ?? 'Guam',
+      island: (a.market ?? existing?.market) === 'Other Island' ? a.island ?? existing?.island ?? '' : '',
       balanceDue: u.role === 'admin' && a.balanceDue !== undefined ? Math.max(0, Number(a.balanceDue) || 0) : existing?.balanceDue ?? 0,
       overdueBalance: u.role === 'admin' && a.overdueBalance !== undefined ? Math.max(0, Number(a.overdueBalance) || 0) : existing?.overdueBalance ?? 0,
     }
@@ -575,6 +630,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
     return { added, failed: 0 }
   }
+  const savePriceItems: Ctx['savePriceItems'] = items => {
+    needAdmin()
+    const stamp = nowISO()
+    const full: PriceItem[] = items.map(i => {
+      const ex = i.id ? db.priceItems.find(x => x.id === i.id) : db.priceItems.find(x => x.brand === i.brand && x.product.toLowerCase() === i.product.trim().toLowerCase() && x.unit === i.unit)
+      return { id: ex?.id ?? uid(), brand: i.brand, product: i.product.trim(), sku: i.sku.trim(), unit: i.unit.trim() || 'case', price: Math.max(0, Number(i.price) || 0), active: i.active, updatedAt: stamp }
+    })
+    const ids = new Set(full.map(f => f.id))
+    setDb(d => ({ ...d, priceItems: [...d.priceItems.filter(p => !ids.has(p.id)), ...full] }))
+    if (hasSupabase) persist(() => remote.savePriceItems(full), refresh)
+    audit('UPDATE', 'price_items', 'price-list', `Price list: ${full.length} item${full.length > 1 ? 's' : ''} saved`, null)
+    return full.length
+  }
+  const deletePriceItem: Ctx['deletePriceItem'] = id => {
+    needAdmin()
+    setDb(d => ({ ...d, priceItems: d.priceItems.filter(p => p.id !== id) }))
+    if (hasSupabase) persist(() => remote.deletePriceItem(id), refresh)
+  }
+  const saveQuote: Ctx['saveQuote'] = q => {
+    const u = need()
+    assertAccount(u, q.accountId)
+    if (!q.lines.length) throw new Error('Add at least one product to the quote')
+    if (q.lines.some(l => !(l.qty > 0) || l.price < 0)) throw new Error('Every line needs a quantity above zero')
+    if (u.role !== 'admin' && q.lines.some(l => l.discountPct > MAX_REP_DISCOUNT)) throw new Error(`Discounts above ${MAX_REP_DISCOUNT}% need management approval`)
+    const existing = q.id ? db.quotes.find(x => x.id === q.id) : undefined
+    if (existing && u.role !== 'admin' && existing.repId !== u.id) throw new Error('Permission denied')
+    const acct = db.accounts.find(a => a.id === q.accountId)
+    const total = quoteTotal(q.lines)
+    const top = [...q.lines].sort((a, b) => b.qty * b.price - a.qty * a.price)[0]
+    const stamp = nowISO()
+    const no = existing?.quoteNo ?? `Q-${localDate(stamp).slice(2).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+    let activityId = existing?.activityId ?? null, opportunityId = existing?.opportunityId ?? null
+    const sentNow = q.status !== 'Draft'
+    // a quote that goes to the customer becomes a logged Quotation activity and a Quotation Submitted opportunity
+    if (sentNow && !activityId) {
+      activityId = saveActivity({ accountId: q.accountId, at: stamp, type: 'Quotation', summary: `Quote ${no}: ${q.lines.length} line${q.lines.length > 1 ? 's' : ''}, ${total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`,
+        products: q.lines.map(l => l.product).join(', '), outcome: 'Quote sent', nextAction: 'Follow up on quote', followUpDate: toDateStr(new Date(Date.now() + 3 * 86400000)), followUpDone: false }).id
+    }
+    if (sentNow && !opportunityId) {
+      opportunityId = saveOpportunity({ accountId: q.accountId, brand: top.brand, product: top.product, monthlyValue: total, stage: 'Quotation Submitted', probability: STAGE_DEFAULT_PROB['Quotation Submitted'],
+        expectedClose: q.validUntil || toDateStr(new Date(Date.now() + 14 * 86400000)), nextAction: 'Follow up on quote', notes: `From quote ${no}. Value is the quote total; adjust to the monthly reorder value if different.` }).id
+    }
+    if (opportunityId && (q.status === 'Accepted' || q.status === 'Declined')) {
+      const o = db.opportunities.find(x => x.id === opportunityId)
+      if (o) saveOpportunity({ id: o.id, accountId: o.accountId, stage: q.status === 'Accepted' ? 'Won' : 'Lost', probability: q.status === 'Accepted' ? 100 : 0, lostReason: q.status === 'Declined' ? q.declineReason || 'Price' : undefined, nextAction: q.status === 'Accepted' ? 'Confirm first delivery' : 'Revisit later' })
+    }
+    const full: Quote = { id: existing?.id ?? uid(), quoteNo: no, accountId: q.accountId, repId: existing?.repId ?? (u.role === 'admin' ? acct?.repId || u.id : u.id), status: q.status, validUntil: q.validUntil, notes: q.notes, lines: q.lines, total, activityId, opportunityId, createdAt: existing?.createdAt ?? stamp }
+    setDb(d => ({ ...d, quotes: existing ? d.quotes.map(x => (x.id === full.id ? full : x)) : [full, ...d.quotes] }))
+    if (hasSupabase) persist(() => remote.saveQuote(full), refresh)
+    audit(existing ? 'UPDATE' : 'INSERT', 'quotes', full.id, `${no} · ${accountName(full.accountId)} · ${q.status}`, null)
+    return full
+  }
+  const deleteQuote: Ctx['deleteQuote'] = id => {
+    const u = need(); const ex = db.quotes.find(x => x.id === id)
+    if (!ex) return
+    if (u.role !== 'admin' && !(ex.repId === u.id && ex.status === 'Draft')) throw new Error('Only drafts can be deleted. Ask management.')
+    audit('DELETE', 'quotes', id, ex.quoteNo)
+    setDb(d => ({ ...d, quotes: d.quotes.filter(x => x.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteQuote(id), refresh)
+  }
+  const addPhotos: Ctx['addPhotos'] = items => {
+    const u = need()
+    if (!items.length) return 0
+    items.forEach(i => assertAccount(u, i.accountId))
+    if (!hasSupabase && db.photos.length + items.length > 30) throw new Error('Demo mode keeps up to 30 photos. Delete some first, or connect Supabase for unlimited photos.')
+    const made: Photo[] = items.map(i => ({
+      id: uid(), accountId: i.accountId, activityId: i.activityId ?? null, repId: u.id, tag: i.tag, brand: i.brand ?? null,
+      caption: (i.caption ?? '').trim(), takenAt: nowISO(), url: i.dataUrl,
+    }))
+    setDb(d => ({ ...d, photos: [...made, ...d.photos] }))
+    if (hasSupabase) persist(async () => { for (const p of made) await remote.savePhoto(p, await dataUrlToBlob(p.url)) }, refresh)
+    return made.length
+  }
+  const deletePhoto: Ctx['deletePhoto'] = id => {
+    const u = need(); const p = db.photos.find(x => x.id === id)
+    if (!p) return
+    if (u.role !== 'admin' && p.repId !== u.id) throw new Error('Permission denied')
+    setDb(d => ({ ...d, photos: d.photos.filter(x => x.id !== id) }))
+    if (hasSupabase) persist(() => remote.deletePhoto(p), refresh)
+  }
+  const importBalances: Ctx['importBalances'] = async rows => {
+    needAdmin()
+    const map = new Map(rows.map(r => [r.accountId, r]))
+    const today = todayStr()
+    const updated: Account[] = []
+    const next = db.accounts.map(a => {
+      const r = map.get(a.id)
+      if (!r) return a
+      const n = { ...a, balanceDue: Math.max(0, r.balance), overdueBalance: Math.max(0, r.overdue), balanceUpdated: today }
+      updated.push(n)
+      return n
+    })
+    setDb(d => ({ ...d, accounts: next }))
+    if (hasSupabase && updated.length) await remote.upsertAccounts(updated)
+    audit('UPDATE', 'accounts', 'balances', `Balances updated for ${updated.length} accounts`, null)
+    return { updated: updated.length, overdueTotal: updated.reduce((n, a) => n + (a.overdueBalance ?? 0), 0) }
+  }
   const importSales: Ctx['importSales'] = async recs => {
     needAdmin()
     const stamp = nowISO()
@@ -712,11 +864,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
 
   const value: Ctx = {
-    user, isAdmin: !!isAdmin, loading, mfaPending: !!mfaFactorId, verifyMfa, login, logout, signIn, signUp,
+    user, isAdmin: !!isAdmin, loading, offlineSince, mfaPending: !!mfaFactorId, verifyMfa, login, logout, signIn, signUp,
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
-    importAccounts, importSales, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
+    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
     updateRouteVisit, removeRouteVisit, sendMessage, replyMessage, saveTarget, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

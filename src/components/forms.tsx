@@ -1,9 +1,10 @@
 import { FormEvent, useState } from 'react'
 import {
   ACCOUNT_TYPES, channelAllows, ALL_VILLAGES, ACTIVITY_TYPES, Account, AccountStatus, AccountType, Activity, ActivityType,
-  BRANDS, BrandName, LOST_REASONS, Opportunity, PRIORITIES, PRODUCTS, Priority, SEGMENTS, STAGES, STAGE_DEFAULT_PROB, STAGE_DEFINITIONS, STATUSES, Stage,
+  BRANDS, BrandName, ISLANDS, LOST_REASONS, Market, Opportunity, PRIORITIES, PRODUCTS, Priority, SEGMENTS, STAGES, STAGE_DEFAULT_PROB, STAGE_DEFINITIONS, STATUSES, Stage,
 } from '../types'
 import { useStore } from '../lib/store'
+import { OverdueWarning } from './AccountSnapshot'
 import { Field, Modal, useAction } from './ui'
 import { nowISO, toDateStr, toLocalInput } from '../lib/utils'
 
@@ -22,7 +23,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
     status: (account?.status ?? 'Prospect') as AccountStatus, monthlyPotential: String(account?.monthlyPotential ?? 0),
     monthlySales: String(account?.monthlySales ?? 0), currentProducts: account?.currentProducts ?? '',
     potentialProducts: account?.potentialProducts ?? '', competitor: account?.competitor ?? '',
-    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '', balanceDue: String(account?.balanceDue ?? 0), overdueBalance: String(account?.overdueBalance ?? 0),
+    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '', market: (account?.market ?? 'Guam') as Market, island: account?.island ?? '', balanceDue: String(account?.balanceDue ?? 0), overdueBalance: String(account?.overdueBalance ?? 0),
   })
   const [f, setF] = useState(blank)
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) => setF(s => ({ ...s, [k]: v }))
@@ -35,7 +36,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
       monthlyPotential: Number(f.monthlyPotential) || 0, monthlySales: Number(f.monthlySales) || 0,
       nextFollowUp: f.nextFollowUp || null,
       repId: isAdmin ? f.repId : undefined,
-      sageNo: isAdmin ? f.sageNo : undefined,
+      sageNo: isAdmin ? f.sageNo : undefined, market: f.market, island: f.market === 'Other Island' ? f.island : '',
       balanceDue: isAdmin ? Number(f.balanceDue) || 0 : undefined, overdueBalance: isAdmin ? Number(f.overdueBalance) || 0 : undefined,
     }), account ? 'Account updated' : 'Account created')
     if (saved) { onSaved?.(saved); onClose() }
@@ -51,9 +52,15 @@ export function AccountForm({ open, onClose, account, onSaved }: {
         <Field label="Business segment">
           <select className="input" value={f.segment} onChange={e => set('segment', e.target.value)}>{SEGMENTS.map(t => <option key={t}>{t}</option>)}</select>
         </Field>
-        <Field label="Village / location">
-          <select className="input" value={f.village} onChange={e => set('village', e.target.value)}>{ALL_VILLAGES.map(t => <option key={t}>{t}</option>)}</select>
+        <Field label="Market">
+          <select className="input" value={f.market} onChange={e => set('market', e.target.value as Market)}>
+            <option value="Guam">Guam (villages and routes)</option><option value="Military">Military / Commissary</option><option value="Other Island">Other island</option>
+          </select>
         </Field>
+        {f.market === 'Other Island' && <Field label="Island"><select className="input" value={f.island} onChange={e => set('island', e.target.value)}><option value="">Choose…</option>{ISLANDS.map(t => <option key={t}>{t}</option>)}</select></Field>}
+        {f.market === 'Guam' && <Field label="Village / location">
+          <select className="input" value={f.village} onChange={e => set('village', e.target.value)}>{ALL_VILLAGES.map(t => <option key={t}>{t}</option>)}</select>
+        </Field>}
         <Field label="Sage customer number"><input className="input" disabled={!isAdmin} value={f.sageNo} onChange={e => set('sageNo', e.target.value)} placeholder={isAdmin ? 'e.g. 01-ABC123' : 'Set by management'} /></Field>
         <Field label="Assigned sales rep">
           <select className="input" disabled={!isAdmin} value={f.repId} onChange={e => set('repId', e.target.value)}>
@@ -201,6 +208,7 @@ export function OpportunityForm({ open, onClose, opportunity, defaultAccountId, 
           <Field label="Stage">
             <select className="input" value={f.stage} onChange={e => { const s = e.target.value as Stage; setF(x => ({ ...x, stage: s, probability: String(STAGE_DEFAULT_PROB[s]) })) }}>{STAGES.map(s => <option key={s}>{s}</option>)}</select>
           </Field>
+          <div className="sm:col-span-2"><OverdueWarning account={accounts.find(a => a.id === f.accountId)} /></div>
           <Field label="Probability (%)"><input type="number" min="0" max="100" className="input" value={f.probability} onChange={e => set('probability', e.target.value)} /></Field>
           <Field label="Assigned representative">
             <select className="input" disabled={!isAdmin} value={f.repId} onChange={e => set('repId', e.target.value)}>

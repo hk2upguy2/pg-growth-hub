@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, MapPin, Plus, SkipForward, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { Account, Territory, VILLAGES, territoryOf } from '../types'
+import { Account, Territory, VILLAGES, marketOf, territoryOf } from '../types'
 import { Badge, EmptyState, Field, KPI, Modal, PageHeader, useAction } from '../components/ui'
 import { daysSince, fmtDate, todayStr } from '../lib/utils'
 import { visitFirst } from '../lib/analytics'
@@ -17,7 +17,7 @@ export default function RoutePlanner() {
   const [outcomeFor, setOutcomeFor] = useState<string | null>(null)
   const [outcome, setOutcome] = useState('')
 
-  const ranked = useMemo(() => visitFirst(accounts.filter(a =>
+  const ranked = useMemo(() => visitFirst(accounts.filter(a => marketOf(a) === 'Guam' &&
     (territory === 'All' || territoryOf(a.village) === territory) && (!village || a.village === village))), [accounts, territory, village])
 
   const plans = routePlans.filter(p => p.date === date).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -126,7 +126,7 @@ function NewPlanModal({ date, onClose, onCreate, profiles, isAdmin, userId, acco
   const [terr, setTerr] = useState<Territory | 'All'>('All')
   const [notes, setNotes] = useState('')
   const [picked, setPicked] = useState<string[]>([])
-  const pool = accounts.filter(a => (terr === 'All' || territoryOf(a.village) === terr) && (!isAdmin || a.repId === repId))
+  const pool = accounts.filter(a => marketOf(a) === 'Guam' && (terr === 'All' || territoryOf(a.village) === terr) && (!isAdmin || a.repId === repId))
   return (
     <Modal open onClose={onClose} title="New daily visit plan" wide>
       <form className="grid grid-cols-1 sm:grid-cols-2 gap-4" onSubmit={e => { e.preventDefault(); onCreate(d, repId, terr, notes, picked) }}>

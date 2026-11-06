@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  Account, Activity, Channel, CompetitorRecord, DB, AuditEntry, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, Channel, CompetitorRecord, DB, AuditEntry, Message, MessageRead, Photo, PriceItem, Quote, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 
 /**
@@ -48,6 +48,7 @@ const accountFrom = (r: Row): Account => ({
   lastVisit: r.last_visit, nextFollowUp: r.next_follow_up, notes: r.notes ?? '', createdAt: r.created_at, isDemo: r.is_demo,
   sageNo: r.sage_customer_no ?? '', lastOrderDate: r.last_order_date ?? null,
   balanceDue: num(r.balance_due), overdueBalance: num(r.overdue_balance),
+  market: (r.market ?? 'Guam') as Account['market'], island: r.island ?? '', balanceUpdated: r.balance_updated ?? null,
 })
 const accountTo = (a: Account): Row => ({
   id: a.id, name: a.name, type: a.type, segment: a.segment, village: a.village, address: a.address,
@@ -57,6 +58,7 @@ const accountTo = (a: Account): Row => ({
   potential_products: a.potentialProducts, competitor: a.competitor, last_visit: a.lastVisit, next_follow_up: a.nextFollowUp,
   notes: a.notes, is_demo: !!a.isDemo, sage_customer_no: a.sageNo?.trim() || null, last_order_date: a.lastOrderDate ?? null,
   balance_due: a.balanceDue ?? 0, overdue_balance: a.overdueBalance ?? 0,
+  market: a.market ?? 'Guam', island: a.market === 'Other Island' ? a.island || null : null, balance_updated: a.balanceUpdated ?? null,
 })
 const salesFrom = (r: Row): SalesRecord => ({
   id: r.id, accountId: r.account_id, month: String(r.month).slice(0, 7), brand: r.brand, amount: num(r.amount),
@@ -107,6 +109,15 @@ const visitFrom = (r: Row): RouteVisit => ({
 const messageFrom = (r: Row): Message => ({
   id: r.id, senderId: r.sender_id, recipientId: r.recipient_id ?? null, subject: r.subject ?? '', body: r.body, urgent: !!r.urgent, parentId: r.parent_id ?? null, createdAt: r.created_at,
 })
+const priceFrom = (r: Row): PriceItem => ({ id: r.id, brand: r.brand, product: r.product, sku: r.sku ?? '', unit: r.unit ?? 'case', price: num(r.price), active: r.active !== false, updatedAt: r.updated_at })
+const quoteFrom = (r: Row): Quote => ({
+  id: r.id, quoteNo: r.quote_no, accountId: r.account_id, repId: r.rep_id, status: r.status, validUntil: r.valid_until ?? '', notes: r.notes ?? '',
+  lines: Array.isArray(r.lines) ? r.lines : [], total: num(r.total), activityId: r.activity_id ?? null, opportunityId: r.opportunity_id ?? null, createdAt: r.created_at,
+})
+const photoFrom = (r: Row, urls: Record<string, string>): Photo => ({
+  id: r.id, accountId: r.account_id, activityId: r.activity_id ?? null, repId: r.rep_id ?? '', tag: (r.tag ?? 'Other') as Photo['tag'],
+  brand: (r.brand ?? null) as Photo['brand'], caption: r.caption ?? '', takenAt: r.taken_at, path: r.path, url: urls[r.path] ?? '',
+})
 const targetFrom = (r: Row): RepTarget => ({
   id: r.id, repId: r.rep_id, month: String(r.month).slice(0, 7), salesTarget: num(r.sales_target), visitsTarget: num(r.visits_target), newAccountsTarget: num(r.new_accounts_target),
 })
@@ -140,6 +151,18 @@ export async function loadAll(): Promise<DB> {
     const { data } = await sb().from('audit_log').select('*').order('at', { ascending: false }).limit(500)
     audit = data ?? []
   } catch { audit = [] }
+  let prices: Row[] = [], quotes: Row[] = []
+  try { prices = await fetchAll<Row>('price_items', 'product'); quotes = await fetchAll<Row>('quotes') } catch { prices = []; quotes = [] }
+  // visit photos arrive with migration 008; newest 300 only, shown through short-lived signed links
+  let photoRows: Row[] = []; const photoUrls: Record<string, string> = {}
+  try {
+    const { data } = await sb().from('visit_photos').select('*').order('taken_at', { ascending: false }).limit(300)
+    photoRows = data ?? []
+    if (photoRows.length) {
+      const { data: signed } = await sb().storage.from('visit-photos').createSignedUrls(photoRows.map(p => p.path), 3600)
+      ;(signed ?? []).forEach(s => { if (s.path && s.signedUrl) photoUrls[s.path] = s.signedUrl })
+    }
+  } catch { photoRows = [] }
   let tgts: Row[] = []
   try { tgts = await fetchAll<Row>('rep_targets', 'month') } catch { tgts = [] }
 
@@ -151,7 +174,7 @@ export async function loadAll(): Promise<DB> {
   }
 
   return {
-    messages: msgs.map(messageFrom), targets: tgts.map(targetFrom),
+    photos: photoRows.map(r => photoFrom(r, photoUrls)), priceItems: prices.map(priceFrom), quotes: quotes.map(quoteFrom), messages: msgs.map(messageFrom), targets: tgts.map(targetFrom),
     audit: audit.map((r): AuditEntry => ({ id: String(r.id), at: r.at, actorId: r.actor_id ?? null, actorName: r.actor_name ?? 'system', action: r.action, entity: r.entity, recordId: r.record_id ?? '', label: r.label ?? '', changes: r.changes ?? null })),
     messageReads: reads.map(r => ({ messageId: r.message_id, userId: r.user_id, readAt: r.read_at })),
     profiles: profiles.map(profileFrom), sales: sales.map(salesFrom), accounts: accounts.map(accountFrom), activities: activities.map(activityFrom),
@@ -239,6 +262,33 @@ export const remote = {
   async touchSeen(id: string) {
     await sb().from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', id)
   },
+  async savePhoto(p: Photo, blob: Blob) {
+    const path = `${p.repId}/${p.id}.jpg`
+    const up = await sb().storage.from('visit-photos').upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+    fail('upload photo', up.error)
+    const { error } = await sb().from('visit_photos').insert({
+      id: p.id, account_id: p.accountId, activity_id: p.activityId ?? null, rep_id: p.repId, path, tag: p.tag, brand: p.brand ?? null, caption: p.caption, taken_at: p.takenAt,
+    })
+    if (error) { await sb().storage.from('visit-photos').remove([path]); fail('save photo', error) }
+  },
+  async deletePhoto(p: Photo) {
+    const { error } = await sb().from('visit_photos').delete().eq('id', p.id)
+    fail('delete photo', error)
+    if (p.path) await sb().storage.from('visit-photos').remove([p.path])
+  },
+  async savePriceItems(list: PriceItem[]) {
+    const { error } = await sb().from('price_items').upsert(list.map(p => ({ id: p.id, brand: p.brand, product: p.product, sku: p.sku, unit: p.unit, price: p.price, active: p.active, updated_at: p.updatedAt })))
+    fail('save price list', error)
+  },
+  async deletePriceItem(id: string) { const { error } = await sb().from('price_items').delete().eq('id', id); fail('delete price item', error) },
+  async saveQuote(q: Quote) {
+    const { error } = await sb().from('quotes').upsert({
+      id: q.id, quote_no: q.quoteNo, account_id: q.accountId, rep_id: q.repId, status: q.status, valid_until: q.validUntil || null, notes: q.notes,
+      lines: q.lines, total: q.total, activity_id: q.activityId ?? null, opportunity_id: q.opportunityId ?? null,
+    })
+    fail('save quote', error)
+  },
+  async deleteQuote(id: string) { const { error } = await sb().from('quotes').delete().eq('id', id); fail('delete quote', error) },
   async saveTarget(t: RepTarget) {
     const { error } = await sb().from('rep_targets').upsert(
       { rep_id: t.repId, month: `${t.month}-01`, sales_target: t.salesTarget, visits_target: t.visitsTarget, new_accounts_target: t.newAccountsTarget, updated_at: new Date().toISOString() },
