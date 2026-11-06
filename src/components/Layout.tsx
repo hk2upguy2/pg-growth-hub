@@ -2,12 +2,13 @@ import { ReactNode, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ShoppingCart, UtensilsCrossed, Hotel, ClipboardList, Target, Package, Route,
-  CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Trophy, Menu, X, LogOut, FlaskConical,
+  CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Trophy, Activity as ActivityIcon, ScrollText, LineChart, Menu, X, LogOut, FlaskConical,
 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { AccountType, channelAllows } from '../types'
 import { hasSupabase } from '../lib/supabase'
 import { cx } from '../lib/utils'
+import { QuickVisit } from './QuickVisit'
 import { unreadMessages } from '../lib/analytics'
 
 const NAV = [
@@ -23,9 +24,12 @@ const NAV = [
   { to: '/promotions', label: 'Promotion Calendar', icon: CalendarDays },
   { to: '/competitors', label: 'Competitor Tracking', icon: Swords },
   { to: '/scorecard', label: 'Scorecard', icon: Trophy },
+  { to: '/forecast', label: 'Forecast', icon: LineChart },
+  { to: '/team-activity', label: 'Team Activity', icon: ActivityIcon, admin: true },
   { to: '/messages', label: 'Messages', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/users', label: 'User Management', icon: Users, admin: true },
+  { to: '/audit', label: 'Audit Log', icon: ScrollText, admin: true },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -65,6 +69,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation()
   return (
     <div className="min-h-full flex">
+      <QuickVisit />
       {/* desktop sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 flex-col bg-navy-800 sticky top-0 h-screen overflow-y-auto">
         <Brand />

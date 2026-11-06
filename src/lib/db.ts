@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  Account, Activity, Channel, CompetitorRecord, DB, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, Channel, CompetitorRecord, DB, AuditEntry, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 
 /**
@@ -37,7 +37,7 @@ type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-expl
 const num = (v: unknown) => Number(v ?? 0)
 
 const profileFrom = (r: Row): Profile => ({
-  id: r.id, name: r.full_name, email: r.email, role: r.role, territory: r.territory, channel: (r.channel ?? 'All') as Channel, active: r.active, createdAt: r.created_at,
+  id: r.id, name: r.full_name, email: r.email, role: r.role, territory: r.territory, channel: (r.channel ?? 'All') as Channel, active: r.active, createdAt: r.created_at, lastSeen: r.last_seen ?? null,
 })
 const accountFrom = (r: Row): Account => ({
   id: r.id, accountNo: r.account_no, name: r.name, type: r.type, segment: r.segment ?? 'Other', village: r.village,
@@ -47,6 +47,7 @@ const accountFrom = (r: Row): Account => ({
   currentProducts: r.current_products ?? '', potentialProducts: r.potential_products ?? '', competitor: r.competitor ?? '',
   lastVisit: r.last_visit, nextFollowUp: r.next_follow_up, notes: r.notes ?? '', createdAt: r.created_at, isDemo: r.is_demo,
   sageNo: r.sage_customer_no ?? '', lastOrderDate: r.last_order_date ?? null,
+  balanceDue: num(r.balance_due), overdueBalance: num(r.overdue_balance),
 })
 const accountTo = (a: Account): Row => ({
   id: a.id, name: a.name, type: a.type, segment: a.segment, village: a.village, address: a.address,
@@ -55,6 +56,7 @@ const accountTo = (a: Account): Row => ({
   monthly_potential: a.monthlyPotential, monthly_sales: a.monthlySales, current_products: a.currentProducts,
   potential_products: a.potentialProducts, competitor: a.competitor, last_visit: a.lastVisit, next_follow_up: a.nextFollowUp,
   notes: a.notes, is_demo: !!a.isDemo, sage_customer_no: a.sageNo?.trim() || null, last_order_date: a.lastOrderDate ?? null,
+  balance_due: a.balanceDue ?? 0, overdue_balance: a.overdueBalance ?? 0,
 })
 const salesFrom = (r: Row): SalesRecord => ({
   id: r.id, accountId: r.account_id, month: String(r.month).slice(0, 7), brand: r.brand, amount: num(r.amount),
@@ -133,6 +135,11 @@ export async function loadAll(): Promise<DB> {
     reads = await fetchAll<Row>('message_reads', 'message_id')
   } catch { msgs = []; reads = [] }
 
+  let audit: Row[] = []
+  try {
+    const { data } = await sb().from('audit_log').select('*').order('at', { ascending: false }).limit(500)
+    audit = data ?? []
+  } catch { audit = [] }
   let tgts: Row[] = []
   try { tgts = await fetchAll<Row>('rep_targets', 'month') } catch { tgts = [] }
 
@@ -145,6 +152,7 @@ export async function loadAll(): Promise<DB> {
 
   return {
     messages: msgs.map(messageFrom), targets: tgts.map(targetFrom),
+    audit: audit.map((r): AuditEntry => ({ id: String(r.id), at: r.at, actorId: r.actor_id ?? null, actorName: r.actor_name ?? 'system', action: r.action, entity: r.entity, recordId: r.record_id ?? '', label: r.label ?? '', changes: r.changes ?? null })),
     messageReads: reads.map(r => ({ messageId: r.message_id, userId: r.user_id, readAt: r.read_at })),
     profiles: profiles.map(profileFrom), sales: sales.map(salesFrom), accounts: accounts.map(accountFrom), activities: activities.map(activityFrom),
     opportunities: opps.map(oppFrom), promotions: promos.map(p => promoFrom(p, links)), competitors: comps.map(c => compFrom(c, urls)),
@@ -227,6 +235,9 @@ export const remote = {
       list.map(m => ({ id: m.id, sender_id: m.senderId, recipient_id: m.recipientId, subject: m.subject, body: m.body, urgent: m.urgent, parent_id: m.parentId ?? null })),
     )
     fail('send message', error)
+  },
+  async touchSeen(id: string) {
+    await sb().from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', id)
   },
   async saveTarget(t: RepTarget) {
     const { error } = await sb().from('rep_targets').upsert(

@@ -109,3 +109,14 @@ Under User Management, each rep gets a **Sales channel**: *Retail only*, *Hotel 
 - **Brands:** OxKing, Pampeano and Orion added alongside Agrosuper, Hostess and Kikkoman (opportunities, promotions, Sage brand detection, reports).
 - **Message replies:** reps reply to a manager's message; managers see replies in the conversation and answer each rep. Urgent unread messages show on the rep dashboard.
 - **Supabase:** run `supabase/migrations/006_growth_features.sql` **before** deploying this version.
+
+## Adoption, security and forecasting (v11)
+
+- **Quick visit log:** a round button on every screen (phone-friendly). Pick the account, tap the outcome and a follow-up, save. Works offline: visits are held on the device and sent when the connection returns.
+- **Team Activity (management):** last activity, last time each rep opened the app, visits this week/month, overdue follow-ups, and reps who have gone quiet.
+- **Audit Log (management):** who created, changed or deleted accounts, opportunities, users, promotions, targets, messages and activities. Written by database triggers in Supabase.
+- **Two-step login:** Settings, Two-step login (authenticator app). Optional per user; recommended for managers.
+- **Forecast:** weighted pipeline by expected closing month, win rate by brand, loss reasons and opportunities that need attention. Opportunities now require a next action and expected closing date; lost ones require a reason. Stage definitions are shown on the form and on the Forecast page.
+- **Account view:** next best action, what they buy (3 months vs prior 3), last order, balance owed and active promotions at the top of every account.
+- **Balances:** *Balance owed* and *Overdue balance* can be edited on an account or imported with the customer list.
+- **Supabase:** run `supabase/migrations/007_adoption_security_forecast.sql` **before** deploying this version.

@@ -20,6 +20,8 @@ export const FIELDS: FieldDef[] = [
   { key: 'priority', label: 'Priority (A+, A, B, C)', aliases: ['priority', 'account priority', 'rank'] },
   { key: 'status', label: 'Status', aliases: ['status', 'account status'] },
   { key: 'monthlyPotential', label: 'Est. monthly potential ($)', aliases: ['monthly potential', 'estimated monthly potential', 'potential', 'est monthly potential'] },
+  { key: 'balanceDue', label: 'Balance owed ($)', aliases: ['balance', 'balance due', 'ar balance', 'amount owed', 'total balance', 'outstanding'] },
+  { key: 'overdueBalance', label: 'Overdue balance ($)', aliases: ['overdue', 'past due', 'overdue balance', 'past due balance', 'amount overdue'] },
   { key: 'monthlySales', label: 'Actual monthly sales ($)', aliases: ['monthly sales', 'actual monthly sales', 'sales'] },
   { key: 'currentProducts', label: 'Products currently purchased', aliases: ['current products', 'products purchased', 'products currently purchased', 'products'] },
   { key: 'potentialProducts', label: 'Potential products', aliases: ['potential products', 'target products', 'opportunity'] },
@@ -237,7 +239,7 @@ export function prepare(
       name, sageNo, type, segment: segment ?? 'Other', village, address,
       contactName: get('contactName'), contactPosition: get('contactPosition'), phone: get('phone'), email: get('email'),
       repId, priority, status,
-      monthlyPotential: money(get('monthlyPotential')), monthlySales: money(get('monthlySales')),
+      monthlyPotential: money(get('monthlyPotential')), monthlySales: money(get('monthlySales')), balanceDue: money(get('balanceDue')), overdueBalance: money(get('overdueBalance')),
       currentProducts: get('currentProducts'), potentialProducts: get('potentialProducts'), competitor: get('competitor'),
       lastVisit: null, nextFollowUp: null, notes,
     }

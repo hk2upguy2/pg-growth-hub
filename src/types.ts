@@ -53,6 +53,18 @@ export const STAGE_DEFAULT_PROB: Record<Stage, number> = {
   Identified: 10, Contacted: 25, 'Sample Delivered': 40, 'Quotation Submitted': 55, Negotiation: 75, Won: 100, Lost: 0,
 }
 
+/** Written definitions so every rep and manager uses the stages the same way. */
+export const STAGE_DEFINITIONS: Record<Stage, string> = {
+  Identified: 'A target we believe could buy. No conversation yet.',
+  Contacted: 'We have spoken to the decision maker and they agreed to hear more.',
+  'Sample Delivered': 'Samples or a product presentation were given and feedback is pending.',
+  'Quotation Submitted': 'A written price or quotation is with the customer.',
+  Negotiation: 'Price, terms or delivery are being agreed. A first order is likely.',
+  Won: 'The customer placed an order for this product.',
+  Lost: 'The customer will not buy now. A reason is required.',
+}
+export const LOST_REASONS = ['Price', 'Existing supplier contract', 'Quality concerns', 'Retailer imports direct', 'No demand', 'Stock availability', 'Other'] as const
+
 export const ACTIVITY_TYPES = [
   'Customer Visit', 'Phone Call', 'Email', 'Product Presentation', 'Product Sampling',
   'Quotation', 'Negotiation', 'Follow-up', 'New Account Opening',
@@ -68,6 +80,7 @@ export interface Profile {
   channel?: Channel
   active: boolean
   createdAt: string
+  lastSeen?: string | null
 }
 
 export interface Account {
@@ -97,6 +110,8 @@ export interface Account {
   isDemo?: boolean
   sageNo?: string
   lastOrderDate?: string | null
+  balanceDue?: number
+  overdueBalance?: number
 }
 
 export interface Activity {
@@ -209,6 +224,18 @@ export interface Message {
   urgent: boolean
   createdAt: string
 }
+export interface AuditEntry {
+  id: string
+  at: string
+  actorId: string | null
+  actorName: string
+  action: 'INSERT' | 'UPDATE' | 'DELETE' | string
+  entity: string
+  recordId: string
+  label: string
+  changes?: Record<string, [unknown, unknown]> | null
+}
+
 export interface RepTarget {
   id: string
   repId: string
@@ -223,6 +250,7 @@ export interface DB {
   messages: Message[]
   messageReads: MessageRead[]
   targets: RepTarget[]
+  audit: AuditEntry[]
   profiles: Profile[]
   sales: SalesRecord[]
   accounts: Account[]

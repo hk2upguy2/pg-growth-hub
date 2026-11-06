@@ -17,7 +17,8 @@ export default function Login() {
 }
 
 function AccountLogin() {
-  const { signIn, signUp, loading } = useStore()
+  const { signIn, signUp, loading, mfaPending, verifyMfa, logout } = useStore()
+  const [code, setCode] = useState('')
   const [mode, setMode] = useState<'in' | 'up'>('in')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -34,6 +35,22 @@ function AccountLogin() {
   }
 
   if (loading) return <div className="text-sm text-slate-500 py-6 text-center">Loading…</div>
+  if (mfaPending) {
+    const verify = async (e: FormEvent) => {
+      e.preventDefault(); setBusy(true); setMsg(null)
+      const err = await verifyMfa(code)
+      setBusy(false); if (err) { setMsg(err); setCode('') }
+    }
+    return (
+      <form onSubmit={verify} className="space-y-3">
+        <div className="text-sm text-slate-600">Enter the 6-digit code from your authenticator app.</div>
+        <input id="mfa-code" autoFocus required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} className="input text-center text-xl tracking-widest" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} autoComplete="one-time-code" />
+        {msg && <div className="text-sm rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2">{msg}</div>}
+        <button className="btn-primary w-full" disabled={busy || code.length !== 6}>{busy ? 'Checking…' : 'Verify and sign in'}</button>
+        <button type="button" className="text-xs text-navy-600 hover:underline w-full" onClick={logout}>Cancel and sign out</button>
+      </form>
+    )
+  }
   return (
     <form onSubmit={submit} className="space-y-3">
       {mode === 'up' && (

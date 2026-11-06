@@ -280,7 +280,12 @@ export function buildSeed(): DB {
     if (rep && (rep.channel === 'All' || (rep.channel === 'Retail') === wantsRetail)) return a
     return { ...a, repId: wantsRetail ? (territoryOf(a.village) === 'North' ? 'u-rep1' : 'u-rep2') : 'u-rep3' }
   }
-  const accountsFinal = accounts.map(a => fixRep(dm.get(a.id) ?? a))
+  // illustrative balances owed, so the account view can show the warning (about 1 in 6 buyers are overdue)
+  const accountsFinal = accounts.map(a => fixRep(dm.get(a.id) ?? a)).map(a => {
+    if (!a.id.startsWith('a-g') || !(a.monthlySales > 0)) return a
+    const balanceDue = roundTo(a.monthlySales * (0.3 + rnd() * 0.9), 50)
+    return { ...a, balanceDue, overdueBalance: rnd() < 0.17 ? roundTo(balanceDue * (0.3 + rnd() * 0.5), 50) : 0 }
+  })
   const repOf = new Map(accountsFinal.map(a => [a.id, a.repId]))
   activities.forEach(x => { x.repId = repOf.get(x.accountId) ?? x.repId })
   opportunities.forEach(x => { x.repId = repOf.get(x.accountId) ?? x.repId })
@@ -304,7 +309,10 @@ export function buildSeed(): DB {
         visitsTarget: rep.channel === 'Hospitality' ? 30 : 20, newAccountsTarget: rep.channel === 'Hospitality' ? 4 : 2 })
     }
   }
-  return { targets, messages, messageReads: [], profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
+  // demo: staggered "last opened the app" times so the Team Activity page has something to show
+  const seen: Record<string, number> = { 'u-rep1': 0.2, 'u-rep2': 2, 'u-rep3': 5 }
+  const profilesOut = profiles.map(p => (p.id in seen ? { ...p, lastSeen: new Date(Date.now() - seen[p.id] * 86400000).toISOString() } : p))
+  return { audit: [], targets, messages, messageReads: [], profiles: profilesOut, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

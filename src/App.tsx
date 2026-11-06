@@ -13,6 +13,9 @@ import Products from './pages/Products'
 import RoutePlanner from './pages/RoutePlanner'
 import Promotions from './pages/Promotions'
 import Competitors from './pages/Competitors'
+import Forecast from './pages/Forecast'
+import TeamActivity from './pages/TeamActivity'
+import AuditLog from './pages/AuditLog'
 import Scorecard from './pages/Scorecard'
 import Messages from './pages/Messages'
 import Reports from './pages/Reports'
@@ -40,6 +43,9 @@ export default function App() {
         <Route path="/routes" element={<RoutePlanner />} />
         <Route path="/promotions" element={<Promotions />} />
         <Route path="/competitors" element={<Competitors />} />
+        <Route path="/forecast" element={<Forecast />} />
+        <Route path="/team-activity" element={isAdmin ? <TeamActivity /> : <Navigate to="/" replace />} />
+        <Route path="/audit" element={isAdmin ? <AuditLog /> : <Navigate to="/" replace />} />
         <Route path="/scorecard" element={<Scorecard />} />
         <Route path="/messages" element={<Messages />} />
         <Route path="/reports" element={<Reports />} />

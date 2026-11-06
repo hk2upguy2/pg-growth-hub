@@ -7,11 +7,12 @@ import { Badge, ConfirmButton, DemoBadge, EmptyState, PageHeader, useAction } fr
 import { daysSince, fmtDate, fmtDateTime, money, monthLabel } from '../lib/utils'
 import { territoryOf } from '../types'
 import { pipelineTotals, weighted } from '../lib/analytics'
+import { AccountSnapshot } from '../components/AccountSnapshot'
 
 export default function AccountDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { accounts, activities, opportunities, competitors, routeVisits, routePlans, repName, isAdmin, sales, deleteAccount, completeFollowUp, deleteActivity } = useStore()
+  const { accounts, activities, opportunities, competitors, promotions, routeVisits, routePlans, repName, isAdmin, sales, deleteAccount, completeFollowUp, deleteActivity } = useStore()
   const run = useAction()
   const [edit, setEdit] = useState(false)
   const [logging, setLogging] = useState(false)
@@ -44,6 +45,8 @@ export default function AccountDetail() {
         </>}
       />
       {a.isDemo && <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900"><DemoBadge /> Illustrative demo record — not a confirmed Pacific Grocers customer. Dollar figures are illustrative estimates.</div>}
+
+      <AccountSnapshot a={a} sales={sales} acts={acts} opps={opps} promotions={promotions} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         <div className="card p-4 lg:col-span-2">

@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, channelAllows, CompetitorRecord, DB, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, channelAllows, CompetitorRecord, AuditEntry, DB, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
+import { mfaConfirm, mfaNeeded } from './mfa'
 import { hasSupabase, supabase } from './supabase'
 import { emitSyncError, loadAll, persist, remote } from './db'
 import { nowISO, uid, toDateStr, localDate } from './utils'
@@ -15,7 +16,7 @@ import { NewSales, deriveAccountUpdates, sageKey } from './sales'
  * current user's role and every write is checked. In Supabase mode the same rules are enforced by
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
-const EMPTY: DB = { messages: [], messageReads: [], targets: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
+const EMPTY: DB = { messages: [], messageReads: [], targets: [], audit: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
 const KEY = 'pg-growth-hub:db:v2'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
@@ -33,6 +34,8 @@ interface Ctx {
   user: Profile | null
   isAdmin: boolean
   loading: boolean
+  mfaPending: boolean
+  verifyMfa: (code: string) => Promise<string | null>
   login: (userId: string) => void
   logout: () => void
   signIn: (email: string, password: string) => Promise<string | null>
@@ -49,6 +52,7 @@ interface Ctx {
   messages: Message[]
   messageReads: MessageRead[]
   targets: RepTarget[]
+  audit: AuditEntry[]
   repName: (id: string) => string
   accountName: (id: string) => string
   // mutations (throw on permission failure)
@@ -96,6 +100,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try { return localStorage.getItem(USER_KEY) } catch { return null }
   })
   const [loading, setLoading] = useState(hasSupabase)
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
 
   useEffect(() => {
     if (hasSupabase) return
@@ -113,8 +118,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (event === 'TOKEN_REFRESHED') return
       setUserId(session?.user.id ?? null)
       // never call supabase inside this callback directly (can deadlock) - defer
-      if (session) setTimeout(() => { refresh().finally(() => setLoading(false)) }, 0)
-      else { setDb(EMPTY); setLoading(false) }
+      if (session) setTimeout(async () => {
+        // two-step login: if this user turned it on, hold the session until the code is entered
+        let need: string | null = null
+        try { need = await mfaNeeded() } catch { need = null }
+        setMfaFactorId(need)
+        if (need) { setLoading(false); return }
+        refresh().finally(() => setLoading(false))
+      }, 0)
+      else { setMfaFactorId(null); setDb(EMPTY); setLoading(false) }
     })
     return () => sub.subscription.unsubscribe()
   }, [refresh])
@@ -130,8 +142,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [refresh])
 
-  const user = useMemo(() => db.profiles.find(p => p.id === userId && p.active) ?? null, [db.profiles, userId])
+  const user = useMemo(() => (mfaFactorId ? null : db.profiles.find(p => p.id === userId && p.active) ?? null), [db.profiles, userId, mfaFactorId])
+  const verifyMfa = useCallback(async (code: string) => {
+    if (!mfaFactorId) return null
+    try { await mfaConfirm(mfaFactorId, code) } catch (e) { return e instanceof Error ? e.message : 'That code did not work' }
+    setMfaFactorId(null); setLoading(true); await refresh(); setLoading(false)
+    return null
+  }, [mfaFactorId, refresh])
   const isAdmin = user?.role === 'admin'
+
+  // record when each person last opened the app (shown to management under Team Activity)
+  const seenFor = useMemo(() => ({ id: '' }), [])
+  useEffect(() => {
+    if (!user || seenFor.id === user.id) return
+    seenFor.id = user.id
+    if (hasSupabase) { void remote.touchSeen(user.id) }
+    else setDb(d => ({ ...d, profiles: d.profiles.map(p => (p.id === user.id ? { ...p, lastSeen: nowISO() } : p)) }))
+  }, [user, seenFor])
 
   const login = useCallback((id: string) => {
     setUserId(id)
@@ -157,7 +184,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---- scoped reads ----
   const scoped = useMemo(() => {
-    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [], targets: [] } as Omit<DB, 'profiles'>
+    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [], targets: [], audit: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
     const myAccounts = db.accounts.filter(a => a.repId === user.id && channelAllows(user.channel, a.type))
     const ids = new Set(myAccounts.map(a => a.id))
@@ -176,6 +203,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       routeVisits: db.routeVisits.filter(v => planIds.has(v.planId) && ids.has(v.accountId)),
       messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id || m.senderId === user.id),
       targets: db.targets.filter(t => t.repId === user.id),
+      audit: [],
       messageReads: db.messageReads.filter(r => r.userId === user.id),
     }
   }, [db, user, isAdmin])
@@ -188,6 +216,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const accountName = useCallback((id: string) => db.accounts.find(a => a.id === id)?.name ?? 'Unknown account', [db.accounts])
 
   // ---- permission helpers ----
+  /** Demo mode keeps its own audit trail; with Supabase, database triggers write it (audit_log), so nothing is done here. */
+  const audit = (action: string, entity: string, recordId: string, label: string, changes?: Record<string, [unknown, unknown]> | null) => {
+    if (hasSupabase || !user) return
+    const e: AuditEntry = { id: uid(), at: nowISO(), actorId: user.id, actorName: user.name, action, entity, recordId, label, changes: changes && Object.keys(changes).length ? changes : null }
+    setDb(d => ({ ...d, audit: [e, ...d.audit].slice(0, 500) }))
+  }
+  const diffOf = (a: object, b: object) => {
+    const out: Record<string, [unknown, unknown]> = {}
+    for (const k of Object.keys(b)) {
+      const x = (a as Record<string, unknown>)[k], y = (b as Record<string, unknown>)[k]
+      if (JSON.stringify(x) !== JSON.stringify(y) && k !== 'createdAt') out[k] = [x ?? null, y ?? null]
+    }
+    return out
+  }
   const need = () => { if (!user) throw new Error('Not signed in') ; return user }
   const needAdmin = () => { const u = need(); if (u.role !== 'admin') throw new Error('Permission denied: management only'); return u }
   const canTouchAccount = (u: Profile, accountId: string) => {
@@ -244,13 +286,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isDemo: existing?.isDemo,
       sageNo,
       lastOrderDate: existing?.lastOrderDate ?? null,
+      balanceDue: u.role === 'admin' && a.balanceDue !== undefined ? Math.max(0, Number(a.balanceDue) || 0) : existing?.balanceDue ?? 0,
+      overdueBalance: u.role === 'admin' && a.overdueBalance !== undefined ? Math.max(0, Number(a.overdueBalance) || 0) : existing?.overdueBalance ?? 0,
     }
+    audit(existing ? 'UPDATE' : 'INSERT', 'accounts', full.id, full.name, existing ? diffOf(existing, full) : null)
     setDb(d => ({ ...d, accounts: existing ? d.accounts.map(x => (x.id === full.id ? full : x)) : [...d.accounts, full] }))
     if (hasSupabase) persist(() => remote.saveAccount(full), refresh)
     return full
   }
   const deleteAccount = (id: string) => {
     needAdmin()
+    audit('DELETE', 'accounts', id, db.accounts.find(a => a.id === id)?.name ?? id)
     if (hasSupabase) persist(() => remote.deleteAccount(id), refresh)
     setDb(d => ({
       ...d,
@@ -304,6 +350,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return full
   }
   const deleteActivity = (id: string) => {
+    { const x = db.activities.find(a => a.id === id); if (x) audit('DELETE', 'sales_activities', id, `${accountName(x.accountId)} · ${x.type}`) }
     const u = need()
     const ex = db.activities.find(a => a.id === id)
     if (!ex) return
@@ -347,6 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return full
   }
   const deleteOpportunity = (id: string) => {
+    { const o = db.opportunities.find(x => x.id === id); if (o) audit('DELETE', 'opportunities', id, `${accountName(o.accountId)} · ${o.brand} ${o.product}`) }
     const u = need()
     const ex = db.opportunities.find(o => o.id === id)
     if (!ex) return
@@ -560,6 +608,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
     const set = new Set(okIds)
     if (okIds.length) {
+      okIds.forEach(id => { const a = db.accounts.find(x => x.id === id); if (a) audit('UPDATE', 'accounts', id, a.name, { repId: [a.repId || null, repId || null] }) })
       setDb(d => ({ ...d, accounts: d.accounts.map(a => (set.has(a.id) ? { ...a, repId } : a)) }))
       if (hasSupabase) persist(() => remote.assignAccounts(okIds, repId), refresh)
     }
@@ -663,7 +712,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
 
   const value: Ctx = {
-    user, isAdmin: !!isAdmin, loading, login, logout, signIn, signUp,
+    user, isAdmin: !!isAdmin, loading, mfaPending: !!mfaFactorId, verifyMfa, login, logout, signIn, signUp,
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,

@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import {
   ACCOUNT_TYPES, channelAllows, ALL_VILLAGES, ACTIVITY_TYPES, Account, AccountStatus, AccountType, Activity, ActivityType,
-  BRANDS, BrandName, Opportunity, PRIORITIES, PRODUCTS, Priority, SEGMENTS, STAGES, STAGE_DEFAULT_PROB, STATUSES, Stage,
+  BRANDS, BrandName, LOST_REASONS, Opportunity, PRIORITIES, PRODUCTS, Priority, SEGMENTS, STAGES, STAGE_DEFAULT_PROB, STAGE_DEFINITIONS, STATUSES, Stage,
 } from '../types'
 import { useStore } from '../lib/store'
 import { Field, Modal, useAction } from './ui'
@@ -22,7 +22,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
     status: (account?.status ?? 'Prospect') as AccountStatus, monthlyPotential: String(account?.monthlyPotential ?? 0),
     monthlySales: String(account?.monthlySales ?? 0), currentProducts: account?.currentProducts ?? '',
     potentialProducts: account?.potentialProducts ?? '', competitor: account?.competitor ?? '',
-    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '',
+    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '', balanceDue: String(account?.balanceDue ?? 0), overdueBalance: String(account?.overdueBalance ?? 0),
   })
   const [f, setF] = useState(blank)
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) => setF(s => ({ ...s, [k]: v }))
@@ -36,6 +36,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
       nextFollowUp: f.nextFollowUp || null,
       repId: isAdmin ? f.repId : undefined,
       sageNo: isAdmin ? f.sageNo : undefined,
+      balanceDue: isAdmin ? Number(f.balanceDue) || 0 : undefined, overdueBalance: isAdmin ? Number(f.overdueBalance) || 0 : undefined,
     }), account ? 'Account updated' : 'Account created')
     if (saved) { onSaved?.(saved); onClose() }
   }
@@ -72,6 +73,8 @@ export function AccountForm({ open, onClose, account, onSaved }: {
         </Field>
         <Field label="Estimated monthly potential ($)"><input type="number" min="0" className="input" value={f.monthlyPotential} onChange={e => set('monthlyPotential', e.target.value)} /></Field>
         <Field label="Actual monthly sales ($)"><input type="number" min="0" className="input" value={f.monthlySales} onChange={e => set('monthlySales', e.target.value)} /></Field>
+        {isAdmin && <Field label="Balance owed ($)"><input type="number" min="0" className="input" value={f.balanceDue} onChange={e => set('balanceDue', e.target.value)} /></Field>}
+        {isAdmin && <Field label="Overdue balance ($)"><input type="number" min="0" className="input" value={f.overdueBalance} onChange={e => set('overdueBalance', e.target.value)} /></Field>}
         <Field label="Products currently purchased" className="sm:col-span-2"><input className="input" value={f.currentProducts} onChange={e => set('currentProducts', e.target.value)} /></Field>
         <Field label="Potential products" className="sm:col-span-2"><input className="input" value={f.potentialProducts} onChange={e => set('potentialProducts', e.target.value)} /></Field>
         <Field label="Competitor / current supplier"><input className="input" value={f.competitor} onChange={e => set('competitor', e.target.value)} /></Field>
@@ -194,7 +197,7 @@ export function OpportunityForm({ open, onClose, opportunity, defaultAccountId, 
             </select>
           </Field>
           <Field label="Estimated monthly sales ($)"><input type="number" min="0" className="input" value={f.monthlyValue} onChange={e => set('monthlyValue', e.target.value)} /></Field>
-          <Field label="Expected closing date"><input type="date" className="input" value={f.expectedClose} onChange={e => set('expectedClose', e.target.value)} /></Field>
+          <Field label="Expected closing date *"><input required type="date" className="input" value={f.expectedClose} onChange={e => set('expectedClose', e.target.value)} /></Field>
           <Field label="Stage">
             <select className="input" value={f.stage} onChange={e => { const s = e.target.value as Stage; setF(x => ({ ...x, stage: s, probability: String(STAGE_DEFAULT_PROB[s]) })) }}>{STAGES.map(s => <option key={s}>{s}</option>)}</select>
           </Field>
@@ -204,8 +207,16 @@ export function OpportunityForm({ open, onClose, opportunity, defaultAccountId, 
               {(isAdmin ? reps : profiles.filter(p => p.id === user?.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
-          <Field label="Next action"><input className="input" value={f.nextAction} onChange={e => set('nextAction', e.target.value)} /></Field>
-          {f.stage === 'Lost' && <Field label="Reason lost (e.g. competitor, price)" className="sm:col-span-2"><input className="input" value={f.lostReason} onChange={e => set('lostReason', e.target.value)} /></Field>}
+          <Field label={`Next action${f.stage === 'Won' || f.stage === 'Lost' ? '' : ' *'}`}><input required={f.stage !== 'Won' && f.stage !== 'Lost'} className="input" value={f.nextAction} onChange={e => set('nextAction', e.target.value)} placeholder="What happens next, and who does it" /></Field>
+          <div className="sm:col-span-2 -mt-2 text-xs text-slate-500 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2"><strong>{f.stage}:</strong> {STAGE_DEFINITIONS[f.stage as Stage]}</div>
+          {f.stage === 'Lost' && (
+            <Field label="Reason lost *" className="sm:col-span-2">
+              <select required className="input" value={f.lostReason} onChange={e => set('lostReason', e.target.value)}>
+                <option value="">Choose a reason…</option>
+                {[...LOST_REASONS, ...(f.lostReason && !(LOST_REASONS as readonly string[]).includes(f.lostReason) ? [f.lostReason] : [])].map(r => <option key={r}>{r}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Notes" className="sm:col-span-2"><textarea rows={3} className="input" value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
           <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
