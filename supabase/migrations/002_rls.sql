@@ -18,6 +18,20 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from accounts where id = acct and assigned_rep_id = auth.uid())
 $$;
 
+-- Helpers for promotions. They bypass RLS (security definer) so the promotions and
+-- promotion_accounts policies do not query each other, which causes infinite recursion.
+create or replace function promo_visible_to_rep(pid uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from promotion_accounts pa
+                 join accounts a on a.id = pa.account_id
+                 where pa.promotion_id = pid and a.assigned_rep_id = auth.uid())
+$$;
+
+create or replace function promo_is_mine(pid uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from promotions where id = pid and responsible_id = auth.uid())
+$$;
+
 alter table profiles            enable row level security;
 alter table brands              enable row level security;
 alter table products            enable row level security;
@@ -105,7 +119,7 @@ create policy opps_delete on opportunities for delete to authenticated
 -- ---------- promotions ----------
 create policy promos_select on promotions for select to authenticated
   using (is_admin() or responsible_id = auth.uid()
-         or exists (select 1 from promotion_accounts pa where pa.promotion_id = promotions.id and owns_account(pa.account_id)));
+         or promo_visible_to_rep(id));
 create policy promos_insert on promotions for insert to authenticated
   with check (is_admin() or (is_active_user() and responsible_id = auth.uid()));
 create policy promos_update on promotions for update to authenticated
@@ -116,12 +130,12 @@ create policy promos_delete on promotions for delete to authenticated
 
 create policy promo_accounts_select on promotion_accounts for select to authenticated
   using (is_admin() or owns_account(account_id)
-         or exists (select 1 from promotions p where p.id = promotion_id and p.responsible_id = auth.uid()));
+         or promo_is_mine(promotion_id));
 create policy promo_accounts_write on promotion_accounts for all to authenticated
   using (is_admin() or (owns_account(account_id)
-         and exists (select 1 from promotions p where p.id = promotion_id and p.responsible_id = auth.uid())))
+         and promo_is_mine(promotion_id)))
   with check (is_admin() or (owns_account(account_id)
-         and exists (select 1 from promotions p where p.id = promotion_id and p.responsible_id = auth.uid())));
+         and promo_is_mine(promotion_id)));
 
 -- ---------- competitor_tracking ----------
 create policy comp_select on competitor_tracking for select to authenticated
