@@ -45,7 +45,7 @@ export function parseAmount(raw: string): number | null {
   return neg ? -Number(digits) : Number(digits)
 }
 
-const BRAND_WORDS: [string, string][] = [['agrosuper', 'Agrosuper'], ['hostess', 'Hostess'], ['kikkoman', 'Kikkoman']]
+const BRAND_WORDS: [string, string][] = [['agrosuper', 'Agrosuper'], ['hostess', 'Hostess'], ['kikkoman', 'Kikkoman'], ['oxking', 'OxKing'], ['ox king', 'OxKing'], ['pampeano', 'Pampeano'], ['orion', 'Orion'], ['choco pie', 'Orion']]
 export function detectBrand(text: string): string | null {
   const t = text.toLowerCase()
   return BRAND_WORDS.find(([w]) => t.includes(w))?.[1] ?? null

@@ -3,7 +3,7 @@ export type AccountType = 'Retail' | 'Foodservice' | 'Hotel' | 'Institutional'
 export type Priority = 'A+' | 'A' | 'B' | 'C'
 export type AccountStatus = 'Prospect' | 'Active' | 'Inactive' | 'On Hold'
 export type Territory = 'North' | 'Central' | 'South'
-export type BrandName = 'Agrosuper' | 'Hostess' | 'Kikkoman'
+export type BrandName = 'Agrosuper' | 'Hostess' | 'Kikkoman' | 'OxKing' | 'Pampeano' | 'Orion'
 
 /** Sales channel of a rep: Retail reps work Retail accounts; Hospitality reps work Hotel, Foodservice and Institutional accounts. */
 export type Channel = 'All' | 'Retail' | 'Hospitality'
@@ -14,7 +14,7 @@ export const channelAllows = (channel: Channel | undefined, t: AccountType): boo
 export const ACCOUNT_TYPES: AccountType[] = ['Retail', 'Foodservice', 'Hotel', 'Institutional']
 export const PRIORITIES: Priority[] = ['A+', 'A', 'B', 'C']
 export const STATUSES: AccountStatus[] = ['Prospect', 'Active', 'Inactive', 'On Hold']
-export const BRANDS: BrandName[] = ['Agrosuper', 'Hostess', 'Kikkoman']
+export const BRANDS: BrandName[] = ['Agrosuper', 'Hostess', 'Kikkoman', 'OxKing', 'Pampeano', 'Orion']
 
 export const SEGMENTS = [
   'Resort Hotel', 'Supermarket', 'Convenience Store', 'Warehouse Club', 'Bar', 'Restaurant',
@@ -37,9 +37,12 @@ export const PRODUCTS: Record<BrandName, string[]> = {
   Agrosuper: ['Party Wings', 'Drummettes', 'Chicken Breast', 'Leg Quarters', 'Thighs', 'Whole Chicken'],
   Hostess: ['Product Placement', 'New SKU', 'Shelf Display', 'Endcap', 'Promotional Campaign'],
   Kikkoman: ['Soy Sauce', 'Teriyaki Sauce', 'Foodservice Soy Sauce', 'Panko', 'Other Kikkoman'],
+  OxKing: ['Corned Beef', 'Other OxKing'],
+  Pampeano: ['Corned Beef', 'Other Pampeano'],
+  Orion: ['Choco Pie', 'Other Orion'],
 }
 export const SUPPLIERS: Record<BrandName, string> = {
-  Agrosuper: 'Agrosuper', Hostess: 'Hostess Brands', Kikkoman: 'Kikkoman',
+  Agrosuper: 'Agrosuper', Hostess: 'Hostess Brands', Kikkoman: 'Kikkoman', OxKing: 'OxKing', Pampeano: 'Pampeano', Orion: 'Orion',
 }
 
 export const STAGES = [
@@ -200,16 +203,26 @@ export interface Message {
   id: string
   senderId: string
   recipientId: string | null // null = all sales reps
+  parentId?: string | null    // set on replies: the message this answers
   subject: string
   body: string
   urgent: boolean
   createdAt: string
+}
+export interface RepTarget {
+  id: string
+  repId: string
+  month: string // YYYY-MM
+  salesTarget: number
+  visitsTarget: number
+  newAccountsTarget: number
 }
 export interface MessageRead { messageId: string; userId: string; readAt: string }
 
 export interface DB {
   messages: Message[]
   messageReads: MessageRead[]
+  targets: RepTarget[]
   profiles: Profile[]
   sales: SalesRecord[]
   accounts: Account[]

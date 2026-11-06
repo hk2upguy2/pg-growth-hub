@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Plus, Search, Upload } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { ACCOUNT_TYPES, ALL_VILLAGES, Account, AccountType, PRIORITIES, STATUSES, territoryOf } from '../types'
@@ -33,7 +33,9 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
   const [priority, setPriority] = useState('')
   const [village, setVillage] = useState('')
   const [rep, setRep] = useState('')
+  const [sp] = useSearchParams()
   const [stale, setStale] = useState(false)
+  const [lapsedOnly, setLapsedOnly] = useState(() => sp.get('lapsed') === '1')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'priority', dir: 1 })
   const [adding, setAdding] = useState(false)
 
@@ -43,6 +45,7 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
       (!fixedType || a.type === fixedType) &&
       (!type || a.type === type) && (!status || a.status === status) && (!priority || a.priority === priority) &&
       (!village || a.village === village) && (!rep || a.repId === rep) &&
+      (!lapsedOnly || ((a.status === 'Active' || a.monthlySales > 0) && (daysSince(a.lastOrderDate ?? null) ?? -1) >= 30)) &&
       (!stale || daysSince(a.lastVisit) === null || (daysSince(a.lastVisit) ?? 0) >= 30) &&
       (!ql || [a.name, a.contactName, a.segment, a.village, a.accountNo, a.potentialProducts].join(' ').toLowerCase().includes(ql)),
     )
@@ -56,7 +59,7 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
       }
     }
     return [...list].sort((a, b) => cmp(a, b) * sort.dir)
-  }, [accounts, q, type, status, priority, village, rep, stale, sort, fixedType])
+  }, [accounts, q, type, status, priority, village, rep, stale, lapsedOnly, sort, fixedType])
 
   const title = fixedType ? `${fixedType} Accounts` : 'Account Directory'
   const th = (label: string, key: SortKey) => (
@@ -88,6 +91,7 @@ export default function Accounts({ fixedType }: { fixedType?: AccountType }) {
         <select className="input" value={priority} onChange={e => setPriority(e.target.value)}><option value="">All priorities</option>{PRIORITIES.map(t => <option key={t}>{t}</option>)}</select>
         <select className="input" value={village} onChange={e => setVillage(e.target.value)}><option value="">All villages</option>{ALL_VILLAGES.map(t => <option key={t}>{t}</option>)}</select>
         {isAdmin && <select className="input" value={rep} onChange={e => setRep(e.target.value)}><option value="">All reps</option>{profiles.filter(p => p.role === 'rep').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+        <label className="flex items-center gap-2 text-sm px-2"><input type="checkbox" checked={lapsedOnly} onChange={e => setLapsedOnly(e.target.checked)} /> No order 30d+</label>
         <label className="flex items-center gap-2 text-sm px-2"><input type="checkbox" checked={stale} onChange={e => setStale(e.target.checked)} /> Not visited 30d+</label>
       </div>
 

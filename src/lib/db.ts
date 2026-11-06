@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  Account, Activity, Channel, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, Channel, CompetitorRecord, DB, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 
 /**
@@ -103,7 +103,10 @@ const visitFrom = (r: Row): RouteVisit => ({
 })
 
 const messageFrom = (r: Row): Message => ({
-  id: r.id, senderId: r.sender_id, recipientId: r.recipient_id ?? null, subject: r.subject ?? '', body: r.body, urgent: !!r.urgent, createdAt: r.created_at,
+  id: r.id, senderId: r.sender_id, recipientId: r.recipient_id ?? null, subject: r.subject ?? '', body: r.body, urgent: !!r.urgent, parentId: r.parent_id ?? null, createdAt: r.created_at,
+})
+const targetFrom = (r: Row): RepTarget => ({
+  id: r.id, repId: r.rep_id, month: String(r.month).slice(0, 7), salesTarget: num(r.sales_target), visitsTarget: num(r.visits_target), newAccountsTarget: num(r.new_accounts_target),
 })
 
 /* ---------- load ---------- */
@@ -130,6 +133,9 @@ export async function loadAll(): Promise<DB> {
     reads = await fetchAll<Row>('message_reads', 'message_id')
   } catch { msgs = []; reads = [] }
 
+  let tgts: Row[] = []
+  try { tgts = await fetchAll<Row>('rep_targets', 'month') } catch { tgts = [] }
+
   const paths = comps.map(c => c.attachment_path).filter(Boolean) as string[]
   const urls: Record<string, string> = {}
   if (paths.length) {
@@ -138,7 +144,7 @@ export async function loadAll(): Promise<DB> {
   }
 
   return {
-    messages: msgs.map(messageFrom),
+    messages: msgs.map(messageFrom), targets: tgts.map(targetFrom),
     messageReads: reads.map(r => ({ messageId: r.message_id, userId: r.user_id, readAt: r.read_at })),
     profiles: profiles.map(profileFrom), sales: sales.map(salesFrom), accounts: accounts.map(accountFrom), activities: activities.map(activityFrom),
     opportunities: opps.map(oppFrom), promotions: promos.map(p => promoFrom(p, links)), competitors: comps.map(c => compFrom(c, urls)),
@@ -218,9 +224,16 @@ export const remote = {
   async deleteVisit(id: string) { const { error } = await sb().from('route_visits').delete().eq('id', id); fail('delete route visit', error) },
   async sendMessages(list: Message[]) {
     const { error } = await sb().from('messages').insert(
-      list.map(m => ({ id: m.id, sender_id: m.senderId, recipient_id: m.recipientId, subject: m.subject, body: m.body, urgent: m.urgent })),
+      list.map(m => ({ id: m.id, sender_id: m.senderId, recipient_id: m.recipientId, subject: m.subject, body: m.body, urgent: m.urgent, parent_id: m.parentId ?? null })),
     )
     fail('send message', error)
+  },
+  async saveTarget(t: RepTarget) {
+    const { error } = await sb().from('rep_targets').upsert(
+      { rep_id: t.repId, month: `${t.month}-01`, sales_target: t.salesTarget, visits_target: t.visitsTarget, new_accounts_target: t.newAccountsTarget, updated_at: new Date().toISOString() },
+      { onConflict: 'rep_id,month' },
+    )
+    fail('save target', error)
   },
   async deleteMessage(id: string) { const { error } = await sb().from('messages').delete().eq('id', id); fail('delete message', error) },
   async markRead(rows: MessageRead[]) {

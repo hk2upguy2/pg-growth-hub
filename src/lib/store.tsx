@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, channelAllows, CompetitorRecord, DB, Message, MessageRead, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, channelAllows, CompetitorRecord, DB, Message, MessageRead, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
 import { hasSupabase, supabase } from './supabase'
@@ -15,7 +15,7 @@ import { NewSales, deriveAccountUpdates, sageKey } from './sales'
  * current user's role and every write is checked. In Supabase mode the same rules are enforced by
  * Postgres row-level security (see supabase/migrations). Swap this provider for a Supabase-backed one.
  */
-const EMPTY: DB = { messages: [], messageReads: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
+const EMPTY: DB = { messages: [], messageReads: [], targets: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
 const KEY = 'pg-growth-hub:db:v2'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
@@ -48,6 +48,7 @@ interface Ctx {
   routeVisits: RouteVisit[]
   messages: Message[]
   messageReads: MessageRead[]
+  targets: RepTarget[]
   repName: (id: string) => string
   accountName: (id: string) => string
   // mutations (throw on permission failure)
@@ -72,6 +73,8 @@ interface Ctx {
   importAccounts: (rows: ImportRow[]) => Promise<{ added: number; failed: number; error?: string }>
   assignAccounts: (ids: string[], repId: string) => { assigned: number; skipped: number }
   sendMessage: (to: string[] | 'all', subject: string, body: string, urgent: boolean) => number
+  replyMessage: (parentId: string, body: string) => void
+  saveTarget: (t: Omit<RepTarget, 'id'>) => void
   deleteMessage: (id: string) => void
   markMessagesRead: (ids: string[]) => void
   saveProfile: (p: Partial<Profile> & { name: string; email: string }) => Profile
@@ -154,7 +157,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---- scoped reads ----
   const scoped = useMemo(() => {
-    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [] } as Omit<DB, 'profiles'>
+    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], messages: [], messageReads: [], targets: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
     const myAccounts = db.accounts.filter(a => a.repId === user.id && channelAllows(user.channel, a.type))
     const ids = new Set(myAccounts.map(a => a.id))
@@ -171,7 +174,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       competitors: db.competitors.filter(c => mine(c.repId, c.accountId)),
       routePlans: myPlans,
       routeVisits: db.routeVisits.filter(v => planIds.has(v.planId) && ids.has(v.accountId)),
-      messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id),
+      messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id || m.senderId === user.id),
+      targets: db.targets.filter(t => t.repId === user.id),
       messageReads: db.messageReads.filter(r => r.userId === user.id),
     }
   }, [db, user, isAdmin])
@@ -598,9 +602,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (hasSupabase) persist(() => remote.sendMessages(list), refresh)
     return to === 'all' ? reps.length : list.length
   }
+  const replyMessage: Ctx['replyMessage'] = (parentId, body) => {
+    const u = need()
+    if (!body.trim()) throw new Error('Write a reply first')
+    const parent = db.messages.find(m => m.id === parentId)
+    if (!parent) throw new Error('Message not found')
+    const root = parent.parentId ? db.messages.find(m => m.id === parent.parentId) ?? parent : parent
+    // reps answer the manager who wrote to them; managers answer the rep whose message they are replying to
+    let recipientId: string | null
+    if (u.role === 'admin') {
+      recipientId = parent.senderId !== u.id ? parent.senderId : parent.recipientId
+      if (!recipientId) throw new Error('Choose a rep to reply to')
+    } else {
+      if (parent.recipientId !== null && parent.recipientId !== u.id && parent.senderId !== u.id) throw new Error('Permission denied')
+      recipientId = parent.senderId !== u.id ? parent.senderId : parent.recipientId
+      if (!recipientId) throw new Error('Reply to the manager who wrote to you')
+    }
+    const m: Message = { id: uid(), senderId: u.id, recipientId, subject: root.subject ? `Re: ${root.subject.replace(/^Re: /, '')}` : '', body: body.trim(), urgent: false, parentId: root.id, createdAt: nowISO() }
+    setDb(d => ({ ...d, messages: [...d.messages, m] }))
+    if (hasSupabase) persist(() => remote.sendMessages([m]), refresh)
+  }
+  const saveTarget: Ctx['saveTarget'] = t => {
+    needAdmin()
+    const ex = db.targets.find(x => x.repId === t.repId && x.month === t.month)
+    const full: RepTarget = { id: ex?.id ?? uid(), ...t, salesTarget: Math.max(0, Number(t.salesTarget) || 0), visitsTarget: Math.max(0, Math.round(Number(t.visitsTarget) || 0)), newAccountsTarget: Math.max(0, Math.round(Number(t.newAccountsTarget) || 0)) }
+    setDb(d => ({ ...d, targets: ex ? d.targets.map(x => (x.id === ex.id ? full : x)) : [...d.targets, full] }))
+    if (hasSupabase) persist(() => remote.saveTarget(full), refresh)
+  }
   const deleteMessage: Ctx['deleteMessage'] = id => {
     needAdmin()
-    setDb(d => ({ ...d, messages: d.messages.filter(m => m.id !== id), messageReads: d.messageReads.filter(r => r.messageId !== id) }))
+    setDb(d => ({ ...d, messages: d.messages.filter(m => m.id !== id && m.parentId !== id), messageReads: d.messageReads.filter(r => r.messageId !== id) }))
     if (hasSupabase) persist(() => remote.deleteMessage(id), refresh)
   }
   const markMessagesRead: Ctx['markMessagesRead'] = ids => {
@@ -637,7 +668,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
     importAccounts, importSales, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
-    updateRouteVisit, removeRouteVisit, sendMessage, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
+    updateRouteVisit, removeRouteVisit, sendMessage, replyMessage, saveTarget, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }

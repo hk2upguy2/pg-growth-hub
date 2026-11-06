@@ -1,5 +1,5 @@
 import {
-  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, Opportunity, Priority, Profile,
+  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, RepTarget, Opportunity, Priority, Profile,
   PRODUCTS, Promotion, SalesRecord, RoutePlan, RouteVisit, Stage, STAGE_DEFAULT_PROB, territoryOf,
 } from '../types'
 import { deriveAccountUpdates } from './sales'
@@ -291,7 +291,20 @@ export function buildSeed(): DB {
     body: 'This is a sample broadcast to all sales reps. Log every visit the same day and keep next follow-up dates up to date.',
     urgent: false, createdAt: new Date(Date.now() - 86400000).toISOString(),
   }]
-  return { messages, messageReads: [], profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
+  messages.push({ id: 'm-2', senderId: 'u-rep1', recipientId: 'u-admin', parentId: 'm-1', subject: 'Re: Welcome to PG Growth Hub (demo message)',
+    body: 'Thanks. Will do. Can we get the new Hostess price list this week?', urgent: false, createdAt: new Date(Date.now() - 3600000 * 5).toISOString() })
+  // demo monthly targets: roughly 5% above each rep's average of the last three full months
+  const ownerOf = new Map(accountsFinal.map(a => [a.id, a.repId]))
+  const targets: RepTarget[] = []
+  for (const rep of profiles.filter(x => x.role === 'rep')) {
+    const mine = sales.filter(x => ownerOf.get(x.accountId) === rep.id)
+    const avg = [1, 2, 3].reduce((t, b) => t + mine.filter(x => x.month === monthKey(b)).reduce((n, x) => n + x.amount, 0), 0) / 3
+    for (const back of [2, 1, 0]) {
+      targets.push({ id: `t-${rep.id}-${monthKey(back)}`, repId: rep.id, month: monthKey(back), salesTarget: Math.max(1000, Math.round((avg * 1.05) / 500) * 500),
+        visitsTarget: rep.channel === 'Hospitality' ? 30 : 20, newAccountsTarget: rep.channel === 'Hospitality' ? 4 : 2 })
+    }
+  }
+  return { targets, messages, messageReads: [], profiles, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

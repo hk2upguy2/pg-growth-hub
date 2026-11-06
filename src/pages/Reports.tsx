@@ -1,4 +1,5 @@
 import { channelAllows } from '../types'
+import { lapsedAccounts } from '../lib/analytics'
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { EmptyState, PageHeader } from '../components/ui'
@@ -47,6 +48,8 @@ export default function Reports() {
       { id: 'agrosuper', title: 'Agrosuper opportunities', rows: () => opportunities.filter(o => o.brand === 'Agrosuper').map(o => ({ Account: accountName(o.accountId), Segment: accounts.find(a => a.id === o.accountId)?.segment ?? '', Product: o.product, Stage: o.stage, 'Est. monthly': o.monthlyValue, Weighted: Math.round(weighted(o)), Rep: repName(o.repId) })).sort((a, b) => Number(b['Est. monthly']) - Number(a['Est. monthly'])) },
       { id: 'hostess', title: 'Hostess placements', rows: () => opportunities.filter(o => o.brand === 'Hostess').map(o => ({ Account: accountName(o.accountId), Placement: o.product, Stage: o.stage, 'Est. monthly': o.monthlyValue, Rep: repName(o.repId), 'Expected close': o.expectedClose, 'Next action': o.nextAction })) },
       { id: 'kikkoman', title: 'Kikkoman opportunities', rows: () => opportunities.filter(o => o.brand === 'Kikkoman').map(o => ({ Account: accountName(o.accountId), Segment: accounts.find(a => a.id === o.accountId)?.segment ?? '', Product: o.product, Stage: o.stage, 'Est. monthly': o.monthlyValue, Rep: repName(o.repId), 'Lost reason': o.lostReason ?? '' })) },
+      ...(['OxKing', 'Pampeano', 'Orion'] as const).map(b => ({ id: b.toLowerCase(), title: `${b} opportunities`, rows: () => opportunities.filter(o => o.brand === b).map(o => ({ Account: accountName(o.accountId), Segment: accounts.find(a => a.id === o.accountId)?.segment ?? '', Product: o.product, Stage: o.stage, 'Est. monthly': o.monthlyValue, Rep: repName(o.repId) })) })),
+      { id: 'lapsed', title: 'Lapsed customers (no order 30+ days)', rows: () => lapsedAccounts(accounts, 30).map(({ account: a, since }) => ({ Customer: a.name, 'Sage no.': a.sageNo ?? '', 'Last order': a.lastOrderDate ?? '', 'Days since order': since ?? '', 'Usual monthly sales': a.monthlySales, Rep: repName(a.repId) })) },
       { id: 'follow-up', title: 'Follow-up completion', rows: () => reps.map(p => {
         const l = activities.filter(a => a.repId === p.id && a.followUpDate)
         const done = l.filter(a => a.followUpDone).length

@@ -101,3 +101,11 @@ Management: Messages, then choose **All sales reps** or **Choose reps** (one or 
 ## Sales channels
 
 Under User Management, each rep gets a **Sales channel**: *Retail only*, *Hotel & Foodservice only* (also covers Institutional), or *All accounts*. A Retail rep never sees Hotel or Foodservice accounts, and a Hospitality rep never sees Retail accounts (including their activities, opportunities and sales). Management cannot assign an account to a rep outside that channel; the Assign button skips and reports mismatches. Enforced in Postgres by `supabase/migrations/005_sales_channel.sql` — run it **before** deploying this version.
+
+## Lapsed customers, scorecards, brands, replies (v10)
+
+- **Lapsed customers:** Dashboard panel and Accounts filter *No order 30d+* list buying customers whose last Sage order is 30+ days old (amber 30, orange 45, red 60). Also a report.
+- **Scorecard:** managers set monthly sales, visit and new-account targets per rep; reps see their own. Sales come from the Sage import, visits from logged Customer Visit activities.
+- **Brands:** OxKing, Pampeano and Orion added alongside Agrosuper, Hostess and Kikkoman (opportunities, promotions, Sage brand detection, reports).
+- **Message replies:** reps reply to a manager's message; managers see replies in the conversation and answer each rep. Urgent unread messages show on the rep dashboard.
+- **Supabase:** run `supabase/migrations/006_growth_features.sql` **before** deploying this version.

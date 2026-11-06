@@ -2,12 +2,13 @@ import { ReactNode, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ShoppingCart, UtensilsCrossed, Hotel, ClipboardList, Target, Package, Route,
-  CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Menu, X, LogOut, FlaskConical,
+  CalendarDays, Swords, BarChart3, Users, Settings, MessageSquare, Trophy, Menu, X, LogOut, FlaskConical,
 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { AccountType, channelAllows } from '../types'
 import { hasSupabase } from '../lib/supabase'
 import { cx } from '../lib/utils'
+import { unreadMessages } from '../lib/analytics'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -21,6 +22,7 @@ const NAV = [
   { to: '/routes', label: 'Route Planner', icon: Route },
   { to: '/promotions', label: 'Promotion Calendar', icon: CalendarDays },
   { to: '/competitors', label: 'Competitor Tracking', icon: Swords },
+  { to: '/scorecard', label: 'Scorecard', icon: Trophy },
   { to: '/messages', label: 'Messages', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/users', label: 'User Management', icon: Users, admin: true },
@@ -29,7 +31,7 @@ const NAV = [
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { isAdmin, user, messages, messageReads } = useStore()
-  const unread = isAdmin ? 0 : messages.filter(m => !messageReads.some(r => r.messageId === m.id && r.userId === user?.id)).length
+  const unread = unreadMessages(user?.id, messages, messageReads).length
   return (
     <nav className="px-3 space-y-0.5">
       {NAV.filter(n => (!n.admin || isAdmin) && (!('type' in n) || isAdmin || channelAllows(user?.channel, n.type as AccountType))).map(n => (

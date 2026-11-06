@@ -12,6 +12,9 @@ const FOCUS: Record<BrandName, string> = {
   Agrosuper: 'Bars, restaurants, hotels, Korean / chicken / BBQ restaurants, caterers, supermarkets',
   Hostess: 'Supermarkets, convenience stores, retail, hotels, foodservice outlets',
   Kikkoman: 'Japanese and Asian restaurants, hotels, supermarkets, foodservice',
+  OxKing: 'Supermarkets, convenience stores, Pacific retail, institutional buyers',
+  Pampeano: 'Supermarkets, convenience stores, Pacific retail, institutional buyers',
+  Orion: 'Supermarkets, convenience stores, retail snack aisles',
 }
 
 export default function Products() {

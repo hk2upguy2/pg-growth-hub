@@ -4,7 +4,7 @@ import {
 } from 'recharts'
 import { AlertTriangle, Building2, CalendarCheck, DollarSign, Hotel, ShoppingCart, Target, TrendingUp, UserPlus, UserCheck, UtensilsCrossed, Footprints, Users } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { dashboard, followUpsDue, pipelineByStage, staleAccounts } from '../lib/analytics'
+import { dashboard, followUpsDue, lapsedAccounts, pipelineByStage, staleAccounts, unreadMessages } from '../lib/analytics'
 import { Badge, DemoBadge, EmptyState, KPI, PageHeader } from '../components/ui'
 import { daysSince, fmtDate, fmtDateTime, money, moneyShort, monthLabel } from '../lib/utils'
 import { channelAllows, type SalesRecord } from '../types'
@@ -12,11 +12,13 @@ import { channelAllows, type SalesRecord } from '../types'
 const PIE = ['#0f2a4a', '#2c5d96', '#7fa3cc', '#b3c9e3']
 
 export default function Dashboard() {
-  const { accounts, activities, opportunities, profiles, isAdmin, user, repName, accountName, sales } = useStore()
+  const { accounts, activities, opportunities, profiles, isAdmin, user, repName, accountName, sales, messages, messageReads } = useStore()
   const d = dashboard(accounts, activities, opportunities, profiles)
   const stages = pipelineByStage(opportunities).filter(s => s.stage !== 'Lost')
   const overdue = followUpsDue(activities).sort((a, b) => (a.followUpDate! < b.followUpDate! ? -1 : 1))
   const stale = staleAccounts(accounts, 30).slice(0, 5)
+  const lapsed = lapsedAccounts(accounts, 30)
+  const urgent = unreadMessages(user?.id, messages, messageReads).filter(m => m.urgent)
   const recent = [...activities].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 8)
   const noData = accounts.length === 0
 
@@ -26,6 +28,12 @@ export default function Dashboard() {
         title={isAdmin ? 'Management Dashboard' : 'My Dashboard'}
         subtitle={isAdmin ? 'All accounts, representatives and pipeline' : `Your assigned accounts and pipeline · ${user?.name}`}
       />
+      {urgent.length > 0 && (
+        <Link to="/messages" className="card p-4 mb-4 flex items-center gap-3 border-red-300 bg-red-50 text-red-800 hover:bg-red-100">
+          <AlertTriangle size={20} className="shrink-0" />
+          <div className="text-sm"><span className="font-semibold">{urgent.length} urgent message{urgent.length > 1 ? 's' : ''} from management.</span> {urgent[0].subject || 'Open Messages to read.'}</div>
+        </Link>
+      )}
       <SalesFreshness sales={sales} isAdmin={isAdmin} />
       {noData && <div className="card p-6 mb-5"><EmptyState title="No accounts yet" hint="Add accounts from the Account Directory to populate the dashboard. Every figure here is calculated from your records." /></div>}
 
@@ -152,6 +160,22 @@ export default function Dashboard() {
             {d.leaderboard.length === 0 && <EmptyState title="No representatives" />}
           </div>
         </div>
+      </div>
+
+      <div className="card p-4 mb-5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="font-semibold text-navy-900 flex items-center gap-2"><AlertTriangle size={16} className="text-red-600" /> Lapsed customers: no order in 30+ days</h3>
+          <Link className="text-xs text-navy-600 hover:underline" to="/accounts?lapsed=1">View all {lapsed.length}</Link>
+        </div>
+        {lapsed.length === 0 ? (
+          <p className="text-sm text-slate-500 mt-2">{sales.length === 0 ? 'Load sales from Sage (Account Directory → Sales update) and customers who stop ordering will appear here.' : 'Every buying customer has ordered in the last 30 days.'}</p>
+        ) : (
+          <div className="overflow-x-auto mt-2"><table className="w-full min-w-[520px]"><thead><tr><th className="th">Customer</th><th className="th">Days since order</th><th className="th">Usual monthly sales</th>{isAdmin && <th className="th">Rep</th>}</tr></thead>
+            <tbody>{lapsed.slice(0, 8).map(({ account: a, since }) => (
+              <tr key={a.id}><td className="td"><Link className="text-navy-700 font-medium hover:underline" to={`/account/${a.id}`}>{a.name}</Link></td>
+                <td className="td"><Badge tone={(since ?? 0) >= 60 ? 'Lost' : (since ?? 0) >= 45 ? 'A' : 'On Hold'}>{since} days</Badge></td>
+                <td className="td">{moneyShort(a.monthlySales)}</td>{isAdmin && <td className="td">{repName(a.repId)}</td>}</tr>))}</tbody></table></div>
+        )}
       </div>
 
       <div className="card p-4">

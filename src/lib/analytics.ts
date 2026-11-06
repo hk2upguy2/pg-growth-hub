@@ -125,3 +125,21 @@ export function visitFirst(accounts: Account[]) {
     })
     .sort((a, b) => b.score - a.score)
 }
+
+/** Customers who used to buy but have not ordered in N days. Needs sales data from Sage (last order date). */
+export function lapsedAccounts(accounts: Account[], days = 30) {
+  return accounts
+    .filter(a => a.status === 'Active' || a.monthlySales > 0)
+    .map(a => ({ account: a, since: daysSince(a.lastOrderDate ?? null) }))
+    .filter(x => x.since !== null && x.since >= days)
+    .sort((x, y) => y.account.monthlySales - x.account.monthlySales)
+}
+
+/** Unread messages for a user: sent to them, or broadcast by someone else, with no read receipt. */
+export function unreadMessages<M extends { id: string; recipientId: string | null; senderId: string }>(
+  userId: string | undefined, messages: M[], reads: { messageId: string; userId: string }[],
+) {
+  if (!userId) return []
+  const read = new Set(reads.filter(r => r.userId === userId).map(r => r.messageId))
+  return messages.filter(m => !read.has(m.id) && (m.recipientId === userId || (m.recipientId === null && m.senderId !== userId)))
+}

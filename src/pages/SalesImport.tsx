@@ -5,9 +5,10 @@ import { useStore } from '../lib/store'
 import { Badge, EmptyState, Field, PageHeader } from '../components/ui'
 import { downloadFile, money, monthLabel } from '../lib/utils'
 import { autoMap, parseCSV } from '../lib/importer'
+import { BRANDS } from '../types'
 import { SALES_FIELDS, prepareSales } from '../lib/sales'
 
-const FALLBACK_BRANDS = ['Other', 'Agrosuper', 'Hostess', 'Kikkoman']
+const FALLBACK_BRANDS = ['Other', ...BRANDS]
 
 export default function SalesImport() {
   const { accounts, isAdmin, importSales } = useStore()
