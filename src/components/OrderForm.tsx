@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { Field, Modal, useAction } from './ui'
 import { CreditCheck, OverdueWarning } from './AccountSnapshot'
+import { VoiceOrder } from './VoiceOrder'
 import { MAX_REP_DISCOUNT, Order, OrderStatus, ORDER_STATUSES, Quote, QuoteLine, lineTotal, quoteTotal } from '../types'
 import { daysFromNowStr, money } from '../lib/utils'
 
@@ -40,6 +41,7 @@ export function OrderForm({ open, onClose, order, fromQuote, defaultAccountId }:
         </Field>
         <OverdueWarning account={acct} />
         {!locked && <CreditCheck account={acct} orderTotal={total} />}
+        {!locked && <VoiceOrder items={priceItems} onAdd={added => setLines(l => { const out = [...l]; for (const a of added) { const i = out.findIndex(x => x.sku === a.sku && x.product === a.product && x.brand === a.brand); if (i >= 0) out[i] = { ...out[i], qty: out[i].qty + a.qty }; else out.push(a) } return out })} />}
         {!locked && (
           <div className="flex gap-2 flex-wrap items-end">
             <Field label="Add from price list" className="flex-1 min-w-[240px]">

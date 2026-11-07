@@ -144,3 +144,8 @@ Run `supabase/migrations/009_orders_stock_credit.sql` in the Supabase SQL Editor
 - **Today screen**: reps now land on Today: Log a visit, today's route, follow-ups due (with Mark done), due to reorder, stopped ordering, owes money. Every customer row has Call, Directions and Visit buttons. Managers still land on the Dashboard; reps keep their numbers under My Numbers.
 - **Menu**: grouped (My day, Customers, Selling, Performance, Market, Admin). On phones there is a bottom bar: Today, Customers, Log visit, Messages, More. Buttons and fields are larger on phones, and field text is 16px so iPhones do not zoom in.
 - No database changes in v14.
+
+## v15: say your order (trial)
+In **New order**, the "Say your order" box takes a spoken or typed phrase ("ten cases of party wings, five twinkies, two kikkoman soy sauce"), matches it to the price list, and shows each line for the rep to check (green = clear, amber = check, red = no match) before adding it to the order. Nothing is ever submitted by voice alone. It uses simple word matching (no AI service, no extra cost). Quantities by words ("twenty five", "a dozen") or digits both work.
+**To remove it:** delete `src/components/VoiceOrder.tsx`, `src/lib/voiceOrder.ts`, and the `VoiceOrder` import and one `<VoiceOrder … />` line in `src/components/OrderForm.tsx`.
+No database changes.
