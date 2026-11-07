@@ -4,8 +4,8 @@ import { useToast } from './ui'
 
 /* The browser's built-in speech recognition. Not in the TypeScript DOM types, so a minimal shape is declared here. */
 interface Rec {
-  lang: string; continuous: boolean; interimResults: boolean
-  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null
+  lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number
+  onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null
   onerror: ((e: { error: string }) => void) | null
   onend: (() => void) | null
   start: () => void; stop: () => void
@@ -20,7 +20,7 @@ const getCtor = (): RecCtor | null => {
  * Tap, talk, tap again: the words are typed into the field for you. It uses the phone's own speech recognition
  * (Chrome / Safari), which needs a connection. Hidden on browsers that do not support it. Edit the text afterwards.
  */
-export function VoiceButton({ onText }: { onText: (text: string) => void }) {
+export function VoiceButton({ onText }: { onText: (text: string, alternatives?: string[]) => void }) {
   const toast = useToast()
   const [on, setOn] = useState(false)
   const rec = useRef<Rec | null>(null)
@@ -31,12 +31,15 @@ export function VoiceButton({ onText }: { onText: (text: string) => void }) {
   const toggle = () => {
     if (on) { rec.current?.stop(); return }
     const r = new Ctor()
-    r.lang = 'en-US'; r.continuous = true; r.interimResults = false
+    r.lang = 'en-US'; r.continuous = true; r.interimResults = false; r.maxAlternatives = 3
     r.onresult = e => {
-      let said = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) said += e.results[i][0].transcript
-      said = said.trim()
-      if (said) onText(said.charAt(0).toUpperCase() + said.slice(1) + (/[.!?]$/.test(said) ? '' : '.'))
+      const fix = (s: string) => { s = s.trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.') : '' }
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (!e.results[i].isFinal) continue
+        // the browser can offer several guesses for the same words: pass them all so the caller can pick the one that makes sense
+        const alts = Array.from({ length: e.results[i].length }, (_, k) => fix(e.results[i][k].transcript)).filter(Boolean)
+        if (alts.length) onText(alts[0], alts)
+      }
     }
     r.onerror = e => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this site in your browser settings to use voice.', 'err')

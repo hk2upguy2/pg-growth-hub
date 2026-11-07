@@ -149,3 +149,9 @@ Run `supabase/migrations/009_orders_stock_credit.sql` in the Supabase SQL Editor
 In **New order**, the "Say your order" box takes a spoken or typed phrase ("ten cases of party wings, five twinkies, two kikkoman soy sauce"), matches it to the price list, and shows each line for the rep to check (green = clear, amber = check, red = no match) before adding it to the order. Nothing is ever submitted by voice alone. It uses simple word matching (no AI service, no extra cost). Quantities by words ("twenty five", "a dozen") or digits both work.
 **To remove it:** delete `src/components/VoiceOrder.tsx`, `src/lib/voiceOrder.ts`, and the `VoiceOrder` import and one `<VoiceOrder … />` line in `src/components/OrderForm.tsx`.
 No database changes.
+
+## v16: say-your-order catches more
+- Matches by **sound**, so "kick oman", "kikoman" and "Kikkoman" all find the same product; "agro super", "ox king", "cup cakes", "dunettes" and similar splits and slips are recognised.
+- The phone's several guesses for each phrase are all checked, and the one that best fits the price list is used.
+- **It learns your corrections**: if a rep changes the product it picked, the same words go straight to that product next time (stored on that phone only; "Forget" link resets it).
+- Still no AI service and no cost. Same removal steps as v15.

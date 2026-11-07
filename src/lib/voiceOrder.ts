@@ -11,7 +11,7 @@ const SIZE_UNITS = new Set(['lb', 'lbs', 'pound', 'pounds', 'oz', 'ounce', 'ounc
 const FILLER = new Set(['of', 'the', 'a', 'an', 'and', 'plus', 'then', 'also', 'with', 'some', 'please', 'case', 'cases', 'box', 'boxes', 'carton', 'cartons', 'ctn', 'pack', 'packs', 'x', 'for', 'order', 'to', 'add', 'get', 'me', 'need', 'want', 'i', 'more', 'another', 'unit', 'units'])
 
 export interface Match { item: PriceItem; score: number }
-export interface HeardLine { heard: string; qty: number; qtyGuessed: boolean; matches: Match[]; status: 'ok' | 'check' | 'none' }
+export interface HeardLine { taught?: boolean; heard: string; qty: number; qtyGuessed: boolean; matches: Match[]; status: 'ok' | 'check' | 'none' }
 
 const norm = (s: string) => s.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
 const stem = (w: string) => (w.length > 4 && w.endsWith('ies') ? w.slice(0, -3) + 'y' : w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w)
@@ -37,7 +37,13 @@ const isQty = (t: string[], i: number) => {
 }
 
 const words = (s: string) => norm(s).split(' ').filter(Boolean).map(stem).filter(w => !FILLER.has(w) && w.length > 1 && !/^\d+$/.test(w))
-const near = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a) || lev1(a, b)))
+/** Rough "how it sounds" key so mishearings still meet: kikkoman / kick oman / kikoman all give the same key. */
+export function sound(w: string) {
+  const s = w.toLowerCase().replace(/ph/g, 'f').replace(/[ckq]+/g, 'k').replace(/z/g, 's').replace(/x/g, 'ks').replace(/(.)\1+/g, '$1')
+  return s.charAt(0) + s.slice(1).replace(/[aeiouyhw]/g, '')
+}
+const sameSound = (a: string, b: string) => a.length >= 4 && b.length >= 4 && sound(a).length >= 3 && sound(a) === sound(b)
+const near = (a: string, b: string) => a === b || sameSound(a, b) || (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a) || lev1(a, b)))
 function lev1(a: string, b: string) {   // one edit apart (speech recognition often drops or swaps a letter)
   if (Math.abs(a.length - b.length) > 1) return false
   let i = 0, j = 0, edits = 0
@@ -52,10 +58,13 @@ function lev1(a: string, b: string) {   // one edit apart (speech recognition of
 /** "cup cakes" -> "cupcake": join two spoken words when together they form a word from the price list. */
 function joinSplitWords(said: string[], items: PriceItem[]) {
   const vocab = new Set(items.flatMap(i => words(`${i.brand} ${i.product}`)))
+  const bySound = new Map([...vocab].map(v => [sound(v), v]))
+  const known = (w: string) => vocab.has(w) || [...vocab].some(v => sameSound(v, w))
   const out: string[] = []
   for (let i = 0; i < said.length; i++) {
     const j = said[i + 1] ? stem(said[i] + said[i + 1]) : ''
-    if (j && vocab.has(j) && !(vocab.has(said[i]) && vocab.has(said[i + 1]))) { out.push(j); i++ } else out.push(said[i])
+    const hit = j ? (vocab.has(j) ? j : j.length >= 4 && sound(j).length >= 3 ? bySound.get(sound(j)) : undefined) : undefined
+    if (hit && !(known(said[i]) && known(said[i + 1]))) { out.push(hit); i++ } else out.push(said[i])
   }
   return out
 }
@@ -82,7 +91,7 @@ export function matchItems(phrase: string, items: PriceItem[]): Match[] {
   return out.sort((a, b) => b.score - a.score).slice(0, 4)
 }
 
-export function parseOrder(text: string, items: PriceItem[]): HeardLine[] {
+export function parseOrder(text: string, items: PriceItem[], learned: Record<string, string> = {}): HeardLine[] {
   const t = norm(text).split(' ').filter(Boolean)
   // find quantity positions
   const qs: { at: number; len: number; value: number }[] = []
@@ -101,12 +110,15 @@ export function parseOrder(text: string, items: PriceItem[]): HeardLine[] {
 
   return segs.filter(s => words(s.text).length).map(s => {
     const matches = matchItems(s.text, items)
+    const key = norm(s.text.split(' ').filter(w => !FILLER.has(w)).join(' '))
+    const taught = items.find(i => i.id === learned[key])
+    if (taught) { const rest = matches.filter(m => m.item.id !== taught.id); matches.splice(0, matches.length, { item: taught, score: 1.2 }, ...rest) }
     const best = matches[0], second = matches[1]
-    const clear = !!best && best.score >= 0.7 && !(second && second.score >= best.score - 0.2)
+    const clear = !!taught || (!!best && best.score >= 0.7 && !(second && second.score >= best.score - 0.2))
     const ws = s.text.split(' ')
     while (ws.length && FILLER.has(ws[0])) ws.shift()
     while (ws.length && FILLER.has(ws[ws.length - 1])) ws.pop()
     const cleaned = ws.join(' ')
-    return { heard: cleaned || s.text, qty: Math.max(1, s.qty), qtyGuessed: s.guessed, matches, status: !best || best.score < 0.4 ? 'none' : clear ? 'ok' : 'check' } as HeardLine
+    return { taught: !!taught, heard: cleaned || s.text, qty: Math.max(1, s.qty), qtyGuessed: s.guessed, matches, status: !best || best.score < 0.4 ? 'none' : clear ? 'ok' : 'check' } as HeardLine
   })
 }
