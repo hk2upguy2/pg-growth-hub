@@ -16,6 +16,10 @@ import Promotions from './pages/Promotions'
 import Competitors from './pages/Competitors'
 import Quotes from './pages/Quotes'
 import PriceList from './pages/PriceList'
+import Insights from './pages/Insights'
+import Orders from './pages/Orders'
+import VillageBoard from './pages/VillageBoard'
+import Stock from './pages/Stock'
 import Forecast from './pages/Forecast'
 import TeamActivity from './pages/TeamActivity'
 import AuditLog from './pages/AuditLog'
@@ -54,6 +58,10 @@ export default function App() {
         <Route path="/quotes" element={<Quotes />} />
         <Route path="/price-list" element={<PriceList />} />
         <Route path="/forecast" element={<Forecast />} />
+        <Route path="/insights" element={<Insights />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/village-board" element={<VillageBoard />} />
+        <Route path="/stock" element={<Stock />} />
         <Route path="/team-activity" element={isAdmin ? <TeamActivity /> : <Navigate to="/" replace />} />
         <Route path="/audit" element={isAdmin ? <AuditLog /> : <Navigate to="/" replace />} />
         <Route path="/scorecard" element={<Scorecard />} />

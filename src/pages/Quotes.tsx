@@ -39,6 +39,7 @@ export default function Quotes() {
                   <td className="td">{fmtDate(q.createdAt)}</td><td className="td">{q.validUntil ? fmtDate(q.validUntil) : '—'}</td>
                   <td className="td text-right font-semibold">{money(q.total)}</td><td className="td"><Badge tone={tone[q.status]}>{q.status}</Badge></td>
                   <td className="td whitespace-nowrap">
+                    {q.status === 'Accepted' && <Link className="text-xs font-semibold text-navy-700 hover:underline mr-2" to={`/orders?quote=${q.id}`}>Make order</Link>}
                     <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label="Print" onClick={() => printQuote(q, accounts.find(a => a.id === q.accountId), repName(q.repId))}><Printer size={16} /></button>
                     <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label="Edit" onClick={() => setEdit(q)}><Pencil size={16} /></button>
                     {(isAdmin || q.status === 'Draft') && <ConfirmButton className="text-slate-400 hover:text-red-600" message={`Delete quote ${q.quoteNo}?`} onConfirm={() => run(() => deleteQuote(q.id), 'Quote deleted')}><Trash2 size={16} /></ConfirmButton>}

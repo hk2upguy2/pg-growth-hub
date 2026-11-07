@@ -2,7 +2,7 @@ import { ReactNode, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ShoppingCart, UtensilsCrossed, Hotel, ClipboardList, Target, Package, Route,
-  CalendarDays, Swords, BarChart3, Users, Settings, FileText, Tag, MessageSquare, ShieldCheck, Ship, Trophy, Activity as ActivityIcon, ScrollText, LineChart, Menu, X, LogOut, FlaskConical, Camera, CloudOff,
+  CalendarDays, Swords, BarChart3, Users, Settings, FileText, Tag, MessageSquare, ShieldCheck, Ship, Trophy, Activity as ActivityIcon, ScrollText, LineChart, Lightbulb, ClipboardCheck, Boxes, MapPinned, Menu, X, LogOut, FlaskConical, Camera, CloudOff,
 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { NotificationBell } from './NotificationBell'
@@ -24,13 +24,17 @@ const NAV = [
   { to: '/opportunities', label: 'Opportunities', icon: Target },
   { to: '/products', label: 'Product Tracking', icon: Package },
   { to: '/routes', label: 'Route Planner', icon: Route },
+  { to: '/village-board', label: 'Village Board', icon: MapPinned },
   { to: '/promotions', label: 'Promotion Calendar', icon: CalendarDays },
   { to: '/competitors', label: 'Competitor Tracking', icon: Swords },
   { to: '/scorecard', label: 'Scorecard', icon: Trophy },
   { to: '/photos', label: 'Shelf Photos', icon: Camera },
   { to: '/quotes', label: 'Quotes', icon: FileText },
+  { to: '/orders', label: 'Orders', icon: ClipboardCheck },
+  { to: '/stock', label: 'Stock & Expiry', icon: Boxes },
   { to: '/price-list', label: 'Price List', icon: Tag },
   { to: '/forecast', label: 'Forecast', icon: LineChart },
+  { to: '/insights', label: 'Sales Insights', icon: Lightbulb },
   { to: '/team-activity', label: 'Team Activity', icon: ActivityIcon, admin: true },
   { to: '/messages', label: 'Messages', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },

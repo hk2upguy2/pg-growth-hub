@@ -23,7 +23,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
     status: (account?.status ?? 'Prospect') as AccountStatus, monthlyPotential: String(account?.monthlyPotential ?? 0),
     monthlySales: String(account?.monthlySales ?? 0), currentProducts: account?.currentProducts ?? '',
     potentialProducts: account?.potentialProducts ?? '', competitor: account?.competitor ?? '',
-    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '', market: (account?.market ?? 'Guam') as Market, island: account?.island ?? '', balanceDue: String(account?.balanceDue ?? 0), overdueBalance: String(account?.overdueBalance ?? 0),
+    nextFollowUp: account?.nextFollowUp ?? '', notes: account?.notes ?? '', sageNo: account?.sageNo ?? '', market: (account?.market ?? 'Guam') as Market, island: account?.island ?? '', creditLimit: String(account?.creditLimit ?? 0), balanceDue: String(account?.balanceDue ?? 0), overdueBalance: String(account?.overdueBalance ?? 0),
   })
   const [f, setF] = useState(blank)
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) => setF(s => ({ ...s, [k]: v }))
@@ -37,7 +37,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
       nextFollowUp: f.nextFollowUp || null,
       repId: isAdmin ? f.repId : undefined,
       sageNo: isAdmin ? f.sageNo : undefined, market: f.market, island: f.market === 'Other Island' ? f.island : '',
-      balanceDue: isAdmin ? Number(f.balanceDue) || 0 : undefined, overdueBalance: isAdmin ? Number(f.overdueBalance) || 0 : undefined,
+      creditLimit: isAdmin ? Number(f.creditLimit) || 0 : undefined, balanceDue: isAdmin ? Number(f.balanceDue) || 0 : undefined, overdueBalance: isAdmin ? Number(f.overdueBalance) || 0 : undefined,
     }), account ? 'Account updated' : 'Account created')
     if (saved) { onSaved?.(saved); onClose() }
   }
@@ -80,6 +80,7 @@ export function AccountForm({ open, onClose, account, onSaved }: {
         </Field>
         <Field label="Estimated monthly potential ($)"><input type="number" min="0" className="input" value={f.monthlyPotential} onChange={e => set('monthlyPotential', e.target.value)} /></Field>
         <Field label="Actual monthly sales ($)"><input type="number" min="0" className="input" value={f.monthlySales} onChange={e => set('monthlySales', e.target.value)} /></Field>
+        {isAdmin && <Field label="Credit limit ($, 0 = none)"><input type="number" min="0" className="input" value={f.creditLimit} onChange={e => set('creditLimit', e.target.value)} /></Field>}
         {isAdmin && <Field label="Balance owed ($)"><input type="number" min="0" className="input" value={f.balanceDue} onChange={e => set('balanceDue', e.target.value)} /></Field>}
         {isAdmin && <Field label="Overdue balance ($)"><input type="number" min="0" className="input" value={f.overdueBalance} onChange={e => set('overdueBalance', e.target.value)} /></Field>}
         <Field label="Products currently purchased" className="sm:col-span-2"><input className="input" value={f.currentProducts} onChange={e => set('currentProducts', e.target.value)} /></Field>

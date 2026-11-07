@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react'
 import {
-  Account, Activity, BrandName, channelAllows, CompetitorRecord, Photo, PhotoTag, AuditEntry, DB, Message, MessageRead, PriceItem, Quote, QuoteLine, MAX_REP_DISCOUNT, quoteTotal, STAGE_DEFAULT_PROB, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, BrandName, channelAllows, CompetitorRecord, Photo, PhotoTag, AuditEntry, DB, Message, MessageRead, PriceItem, Quote, QuoteLine, Order, StockItem, MAX_REP_DISCOUNT, quoteTotal, STAGE_DEFAULT_PROB, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 import { buildSeed } from './seed'
 import { mfaConfirm, mfaNeeded } from './mfa'
@@ -39,14 +39,19 @@ async function readCache(): Promise<{ at: string; db: DB } | null> {
 // signing out must not leave one person's customer data in the browser for the next
 export const clearOfflineCache = () => { try { localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ } }
 
-const EMPTY: DB = { photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [] }
+const EMPTY: DB = { photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [], profiles: [], sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], orders: [], stock: [] }
 const KEY = 'pg-growth-hub:db:v2'
 const USER_KEY = 'pg-growth-hub:user:v1'
 
 function load(): DB {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return { ...EMPTY, ...(JSON.parse(raw) as DB) }
+    if (raw) {
+      const old = JSON.parse(raw) as DB
+      // demo data saved before orders and stock existed: add the sample orders and stock
+      if (!old.orders || !old.stock) { const s = buildSeed(); return { ...EMPTY, ...old, orders: old.orders ?? s.orders, stock: old.stock ?? s.stock } }
+      return { ...EMPTY, ...old }
+    }
   } catch { /* fall through */ }
   const seed = buildSeed()
   try { localStorage.setItem(KEY, JSON.stringify(seed)) } catch { /* ignore */ }
@@ -78,6 +83,8 @@ interface Ctx {
   targets: RepTarget[]
   priceItems: PriceItem[]
   quotes: Quote[]
+  orders: Order[]
+  stock: StockItem[]
   photos: Photo[]
   audit: AuditEntry[]
   repName: (id: string) => string
@@ -104,6 +111,10 @@ interface Ctx {
   deletePriceItem: (id: string) => void
   saveQuote: (q: { id?: string; accountId: string; status: Quote['status']; validUntil: string; notes: string; lines: QuoteLine[]; declineReason?: string }) => Quote
   deleteQuote: (id: string) => void
+  saveOrder: (o: { id?: string; accountId: string; status?: Order['status']; deliveryDate: string; notes: string; lines: QuoteLine[]; quoteId?: string | null }) => Order
+  deleteOrder: (id: string) => void
+  saveStock: (items: Omit<StockItem, 'id' | 'updatedAt'> & { id?: string }[] | (Omit<StockItem, 'id' | 'updatedAt'> & { id?: string })[]) => number
+  deleteStock: (id: string) => void
   addPhotos: (items: { accountId: string; activityId?: string | null; tag: PhotoTag; brand?: BrandName | null; caption?: string; dataUrl: string }[]) => number
   deletePhoto: (id: string) => void
   importBalances: (rows: { accountId: string; balance: number; overdue: number }[]) => Promise<{ updated: number; overdueTotal: number }>
@@ -234,7 +245,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---- scoped reads ----
   const scoped = useMemo(() => {
-    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [] } as Omit<DB, 'profiles'>
+    if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [], orders: [], stock: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
     const myAccounts = db.accounts.filter(a => a.repId === user.id && channelAllows(user.channel, a.type))
     const ids = new Set(myAccounts.map(a => a.id))
@@ -255,6 +266,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       targets: db.targets.filter(t => t.repId === user.id),
       priceItems: db.priceItems.filter(p => p.active),
       quotes: db.quotes.filter(q => q.repId === user.id && ids.has(q.accountId)),
+      orders: db.orders.filter(o => o.repId === user.id && ids.has(o.accountId)),
+      stock: db.stock,
       photos: db.photos.filter(p => ids.has(p.accountId)),
       audit: [],
       messageReads: db.messageReads.filter(r => r.userId === user.id),
@@ -343,6 +356,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       island: (a.market ?? existing?.market) === 'Other Island' ? a.island ?? existing?.island ?? '' : '',
       balanceDue: u.role === 'admin' && a.balanceDue !== undefined ? Math.max(0, Number(a.balanceDue) || 0) : existing?.balanceDue ?? 0,
       overdueBalance: u.role === 'admin' && a.overdueBalance !== undefined ? Math.max(0, Number(a.overdueBalance) || 0) : existing?.overdueBalance ?? 0,
+      creditLimit: u.role === 'admin' && a.creditLimit !== undefined ? Math.max(0, Number(a.creditLimit) || 0) : existing?.creditLimit ?? 0,
     }
     audit(existing ? 'UPDATE' : 'INSERT', 'accounts', full.id, full.name, existing ? diffOf(existing, full) : null)
     setDb(d => ({ ...d, accounts: existing ? d.accounts.map(x => (x.id === full.id ? full : x)) : [...d.accounts, full] }))
@@ -690,6 +704,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setDb(d => ({ ...d, quotes: d.quotes.filter(x => x.id !== id) }))
     if (hasSupabase) persist(() => remote.deleteQuote(id), refresh)
   }
+  const saveOrder: Ctx['saveOrder'] = o => {
+    const u = need()
+    assertAccount(u, o.accountId)
+    if (!o.lines.length) throw new Error('Add at least one product to the order')
+    if (o.lines.some(l => !(l.qty > 0) || l.price < 0)) throw new Error('Every line needs a quantity above zero')
+    if (u.role !== 'admin' && o.lines.some(l => l.discountPct > MAX_REP_DISCOUNT)) throw new Error(`Discounts above ${MAX_REP_DISCOUNT}% need management approval`)
+    const acct = db.accounts.find(a => a.id === o.accountId)
+    if (u.role !== 'admin' && acct?.status === 'On Hold') throw new Error('This account is on hold. Ask management before placing an order.')
+    const existing = o.id ? db.orders.find(x => x.id === o.id) : undefined
+    if (existing && u.role !== 'admin') throw new Error('Submitted orders can only be changed by management')
+    const total = quoteTotal(o.lines), stamp = nowISO()
+    const no = existing?.orderNo ?? `SO-${localDate(stamp).slice(2).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+    const full: Order = { id: existing?.id ?? uid(), orderNo: no, accountId: o.accountId, repId: existing?.repId ?? (u.role === 'admin' ? acct?.repId || u.id : u.id),
+      status: u.role === 'admin' && o.status ? o.status : existing?.status ?? 'Submitted', deliveryDate: o.deliveryDate, notes: o.notes, lines: o.lines, total, quoteId: o.quoteId ?? existing?.quoteId ?? null, createdAt: existing?.createdAt ?? stamp }
+    if (!existing) {
+      saveActivity({ accountId: o.accountId, at: stamp, type: 'Follow-up', summary: `Order ${no}: ${o.lines.length} line${o.lines.length > 1 ? 's' : ''}, ${total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`,
+        products: o.lines.map(l => l.product).join(', '), outcome: 'Order placed', nextAction: 'Confirm delivery', followUpDate: o.deliveryDate || null, followUpDone: false })
+    }
+    setDb(d => ({ ...d, orders: existing ? d.orders.map(x => (x.id === full.id ? full : x)) : [full, ...d.orders] }))
+    if (hasSupabase) persist(() => remote.saveOrder(full), refresh)
+    audit(existing ? 'UPDATE' : 'INSERT', 'orders', full.id, `${no} · ${accountName(full.accountId)} · ${full.status}`, null)
+    return full
+  }
+  const deleteOrder: Ctx['deleteOrder'] = id => {
+    needAdmin(); const ex = db.orders.find(x => x.id === id); if (!ex) return
+    audit('DELETE', 'orders', id, ex.orderNo)
+    setDb(d => ({ ...d, orders: d.orders.filter(x => x.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteOrder(id), refresh)
+  }
+  const saveStock: Ctx['saveStock'] = items => {
+    needAdmin()
+    const stamp = nowISO(), list = items as (Omit<StockItem, 'id' | 'updatedAt'> & { id?: string })[]
+    const bySku = new Map(db.stock.map(s => [`${s.brand}|${s.sku || s.product}`.toLowerCase(), s]))
+    const made: StockItem[] = list.map(i => {
+      const prev = i.id ? db.stock.find(s => s.id === i.id) : bySku.get(`${i.brand}|${i.sku || i.product}`.toLowerCase())
+      return { id: prev?.id ?? uid(), brand: i.brand, product: i.product.trim(), sku: i.sku.trim(), unit: i.unit || 'case', onHand: Math.max(0, Number(i.onHand) || 0),
+        incoming: Math.max(0, Number(i.incoming) || 0), incomingDate: i.incomingDate || null, expiryDate: i.expiryDate || null, updatedAt: stamp }
+    })
+    const ids = new Set(made.map(m => m.id))
+    setDb(d => ({ ...d, stock: [...d.stock.filter(s => !ids.has(s.id)), ...made] }))
+    if (hasSupabase) persist(() => remote.saveStock(made), refresh)
+    return made.length
+  }
+  const deleteStock: Ctx['deleteStock'] = id => {
+    needAdmin()
+    setDb(d => ({ ...d, stock: d.stock.filter(s => s.id !== id) }))
+    if (hasSupabase) persist(() => remote.deleteStock(id), refresh)
+  }
   const addPhotos: Ctx['addPhotos'] = items => {
     const u = need()
     if (!items.length) return 0
@@ -868,7 +930,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
-    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
+    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, saveOrder, deleteOrder, saveStock, deleteStock, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
     updateRouteVisit, removeRouteVisit, sendMessage, replyMessage, saveTarget, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

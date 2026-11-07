@@ -9,7 +9,7 @@ export const BIG_WIN_VALUE = 2000
 
 /** What needs attention right now, worked out from the data already loaded. Nothing is stored or sent. */
 export function useNotices(): Notice[] {
-  const { user, isAdmin, messages, messageReads, activities, accounts, opportunities, quotes, accountName } = useStore()
+  const { user, isAdmin, messages, messageReads, activities, accounts, opportunities, quotes, orders, stock, accountName } = useStore()
   return useMemo(() => {
     if (!user) return []
     const out: Notice[] = []
@@ -31,6 +31,10 @@ export function useNotices(): Notice[] {
     if (recentWins.length && isAdmin) out.push({ id: 'wins', tone: 'blue', title: `${recentWins.length} big win${recentWins.length > 1 ? 's' : ''} this week`, detail: `${accountName(recentWins[0].accountId)}: ${recentWins[0].brand}`, to: '/opportunities' })
     const accepted = quotes.filter(q => q.status === 'Accepted' && (daysSince(localDate(q.createdAt)) ?? 99) <= 7)
     if (accepted.length) out.push({ id: 'quotes', tone: 'blue', title: `${accepted.length} quote${accepted.length > 1 ? 's' : ''} accepted this week`, detail: `${accepted[0].quoteNo} · ${accountName(accepted[0].accountId)}`, to: '/quotes' })
+    const waiting = orders.filter(o => o.status === 'Submitted')
+    if (waiting.length && isAdmin) out.push({ id: 'orders', tone: 'amber', title: `${waiting.length} order${waiting.length > 1 ? 's' : ''} waiting for the office`, detail: `${waiting[0].orderNo} · ${accountName(waiting[0].accountId)}`, to: '/orders' })
+    const soon = stock.filter(s => s.expiryDate && (daysSince(s.expiryDate) ?? 0) >= -60)
+    if (soon.length) out.push({ id: 'expiry', tone: 'amber', title: `${soon.length} product${soon.length > 1 ? 's' : ''} near expiry`, detail: `${soon[0].product}: push this week`, to: '/stock' })
     return out
-  }, [user, isAdmin, messages, messageReads, activities, accounts, opportunities, quotes, accountName])
+  }, [user, isAdmin, messages, messageReads, activities, accounts, opportunities, quotes, orders, stock, accountName])
 }

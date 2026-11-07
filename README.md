@@ -128,3 +128,13 @@ Under User Management, each rep gets a **Sales channel**: *Retail only*, *Hotel 
 - **Alerts:** the bell in the menu lists unread messages, follow-ups due, customers who stopped ordering, overdue balances, accepted quotes and (managers) big wins. A morning email digest is available: see `docs/NOTIFICATIONS.md`.
 - **Quotes, price list, balances, commissary and other-island accounts:** see the Quotes, Price List and Account Directory sections.
 - **Supabase:** run `supabase/migrations/008_photos_quotes_markets.sql` **before** deploying this version.
+
+## v13: Sales Insights, Orders, Stock & Expiry, Village Board, credit limits, incentives
+Run `supabase/migrations/009_orders_stock_credit.sql` in the Supabase SQL Editor BEFORE deploying (orders, stock_items, accounts.credit_limit).
+- **Sales Insights** (no new data needed): Whitespace (brands similar customers buy that this one does not), Reorders (regular buyers who are due), Supplier report (print or CSV per brand), Promo results (before vs during, net of other accounts).
+- **Orders**: reps submit orders from the price list or from an accepted quote (Quotes > Make order); logged as an activity; stock levels shown on each line; only management changes status. Reps cannot order for On Hold accounts.
+- **Credit limit**: set on the account (management) or synced from Sage; warns before a quote or order that is near, at or over the limit.
+- **Stock & Expiry**: management imports or types stock; everyone sees low stock and the near-expiry "push this week" list; the bell flags it.
+- **Village Board**: every village at a glance (sales, buying, stopped ordering, not visited in 30+ days).
+- **Scorecard**: incentive points and Gold / Silver / Bronze tiers (sales 60%, visits 20%, new accounts 20%). Tiers are a starting point, not your real plan.
+- Sage sync: now also carries CreditLimit.

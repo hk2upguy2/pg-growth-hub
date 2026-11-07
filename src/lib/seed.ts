@@ -1,5 +1,5 @@
 import {
-  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, PriceItem, RepTarget, Opportunity, Priority, Profile,
+  Account, Activity, ActivityType, BrandName, CompetitorRecord, DB, Message, PriceItem, Order, StockItem, quoteTotal, RepTarget, Opportunity, Priority, Profile,
   PRODUCTS, Promotion, SalesRecord, RoutePlan, RouteVisit, Stage, STAGE_DEFAULT_PROB, territoryOf,
 } from '../types'
 import { deriveAccountUpdates } from './sales'
@@ -295,7 +295,9 @@ export function buildSeed(): DB {
   const accountsFinal = accounts.map(a => fixRep(dm.get(a.id) ?? a)).map(a => {
     if (!a.id.startsWith('a-g') || !(a.monthlySales > 0)) return a
     const balanceDue = roundTo(a.monthlySales * (0.3 + rnd() * 0.9), 50)
-    return { ...a, balanceDue, overdueBalance: rnd() < 0.17 ? roundTo(balanceDue * (0.3 + rnd() * 0.5), 50) : 0 }
+    const tight = rnd() < 0.12   // a few accounts sit at or over their credit limit so the warning can be tried
+    return { ...a, balanceDue, overdueBalance: rnd() < 0.17 ? roundTo(balanceDue * (0.3 + rnd() * 0.5), 50) : 0,
+      creditLimit: tight ? Math.max(500, roundTo(balanceDue * 0.9, 50)) : Math.max(2000, roundTo(a.monthlySales * (1.4 + rnd() * 0.8), 500)) }
   })
   const repOf = new Map(accountsFinal.map(a => [a.id, a.repId]))
   activities.forEach(x => { x.repId = repOf.get(x.accountId) ?? x.repId })
@@ -332,7 +334,22 @@ export function buildSeed(): DB {
     ['Kikkoman', 'Soy Sauce', 'KIK-SS', 'case', 52], ['Kikkoman', 'Teriyaki Sauce', 'KIK-TS', 'case', 55], ['Kikkoman', 'Foodservice Soy Sauce', 'KIK-FS', 'case', 68],
     ['OxKing', 'Corned Beef', 'OXK-CB', 'case', 58], ['Pampeano', 'Corned Beef', 'PAM-CB', 'case', 56], ['Orion', 'Choco Pie', 'ORI-CP', 'case', 41],
   ] as [PriceItem['brand'], string, string, string, number][]).map(([brand, product, sku, unit, price], i) => ({ id: `pi-${i + 1}`, brand, product, sku, unit, price, active: true, updatedAt: stampP }))
-  return { photos: [], priceItems, quotes: [], audit: [], targets, messages, messageReads: [], profiles: profilesOut, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
+  // ILLUSTRATIVE orders and stock so order entry, stock and near-expiry can be tried in demo mode
+  const dayStr = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+  const orderStatuses = ['Delivered', 'Delivered', 'Confirmed', 'Submitted', 'Submitted', 'Cancelled'] as const
+  const buyers = accountsFinal.filter(a => a.id.startsWith('a-g') && a.monthlySales > 0 && a.repId)
+  const orders: Order[] = buyers.filter((_, i) => i % 5 === 0).slice(0, 14).map((a, i) => {
+    const picks = [priceItems[Math.floor(rnd() * priceItems.length)], priceItems[Math.floor(rnd() * priceItems.length)]].filter((p, j, arr) => arr.indexOf(p) === j)
+    const lines = picks.map(p => ({ brand: p.brand, product: p.product, sku: p.sku, unit: p.unit, qty: 2 + Math.floor(rnd() * 14), price: p.price, discountPct: rnd() < 0.2 ? 5 : 0 }))
+    const created = new Date(Date.now() - (i * 2 + 1) * 86400000).toISOString()
+    return { id: `o-${i + 1}`, orderNo: `SO-DEMO-${1001 + i}`, accountId: a.id, repId: a.repId, status: orderStatuses[i % orderStatuses.length], deliveryDate: dayStr(-i * 2 + 2), notes: '', lines, total: quoteTotal(lines), quoteId: null, createdAt: created }
+  })
+  const stock: StockItem[] = priceItems.map((p, i) => ({
+    id: `st-${i + 1}`, brand: p.brand, product: p.product, sku: p.sku, unit: p.unit,
+    onHand: i % 6 === 2 ? 12 + Math.floor(rnd() * 20) : 150 + Math.floor(rnd() * 900), incoming: i % 4 === 1 ? 400 + Math.floor(rnd() * 600) : 0, incomingDate: i % 4 === 1 ? dayStr(6 + i) : null,
+    expiryDate: i % 5 === 3 ? dayStr(14 + i * 4) : dayStr(200 + i * 17), updatedAt: stampP,
+  }))
+  return { orders, stock, photos: [], priceItems, quotes: [], audit: [], targets, messages, messageReads: [], profiles: profilesOut, sales, accounts: accountsFinal, activities, opportunities, promotions, competitors, routePlans, routeVisits: keptVisits }
 }
 
 export const PRIORITY_ORDER: Record<Priority, number> = { 'A+': 0, A: 1, B: 2, C: 3 }

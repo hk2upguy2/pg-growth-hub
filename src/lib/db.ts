@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  Account, Activity, Channel, CompetitorRecord, DB, AuditEntry, Message, MessageRead, Photo, PriceItem, Quote, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
+  Account, Activity, Channel, CompetitorRecord, DB, AuditEntry, Message, MessageRead, Photo, PriceItem, Quote, Order, StockItem, RepTarget, Opportunity, Profile, Promotion, RoutePlan, RouteVisit, SalesRecord,
 } from '../types'
 
 /**
@@ -47,7 +47,7 @@ const accountFrom = (r: Row): Account => ({
   currentProducts: r.current_products ?? '', potentialProducts: r.potential_products ?? '', competitor: r.competitor ?? '',
   lastVisit: r.last_visit, nextFollowUp: r.next_follow_up, notes: r.notes ?? '', createdAt: r.created_at, isDemo: r.is_demo,
   sageNo: r.sage_customer_no ?? '', lastOrderDate: r.last_order_date ?? null,
-  balanceDue: num(r.balance_due), overdueBalance: num(r.overdue_balance),
+  balanceDue: num(r.balance_due), overdueBalance: num(r.overdue_balance), creditLimit: num(r.credit_limit),
   market: (r.market ?? 'Guam') as Account['market'], island: r.island ?? '', balanceUpdated: r.balance_updated ?? null,
 })
 const accountTo = (a: Account): Row => ({
@@ -57,7 +57,7 @@ const accountTo = (a: Account): Row => ({
   monthly_potential: a.monthlyPotential, monthly_sales: a.monthlySales, current_products: a.currentProducts,
   potential_products: a.potentialProducts, competitor: a.competitor, last_visit: a.lastVisit, next_follow_up: a.nextFollowUp,
   notes: a.notes, is_demo: !!a.isDemo, sage_customer_no: a.sageNo?.trim() || null, last_order_date: a.lastOrderDate ?? null,
-  balance_due: a.balanceDue ?? 0, overdue_balance: a.overdueBalance ?? 0,
+  balance_due: a.balanceDue ?? 0, overdue_balance: a.overdueBalance ?? 0, credit_limit: a.creditLimit ?? 0,
   market: a.market ?? 'Guam', island: a.market === 'Other Island' ? a.island || null : null, balance_updated: a.balanceUpdated ?? null,
 })
 const salesFrom = (r: Row): SalesRecord => ({
@@ -110,6 +110,14 @@ const messageFrom = (r: Row): Message => ({
   id: r.id, senderId: r.sender_id, recipientId: r.recipient_id ?? null, subject: r.subject ?? '', body: r.body, urgent: !!r.urgent, parentId: r.parent_id ?? null, createdAt: r.created_at,
 })
 const priceFrom = (r: Row): PriceItem => ({ id: r.id, brand: r.brand, product: r.product, sku: r.sku ?? '', unit: r.unit ?? 'case', price: num(r.price), active: r.active !== false, updatedAt: r.updated_at })
+const orderFrom = (r: Row): Order => ({
+  id: r.id, orderNo: r.order_no, accountId: r.account_id, repId: r.rep_id ?? '', status: r.status, deliveryDate: r.delivery_date ?? '', notes: r.notes ?? '',
+  lines: r.lines ?? [], total: num(r.total), quoteId: r.quote_id ?? null, createdAt: r.created_at,
+})
+const stockFrom = (r: Row): StockItem => ({
+  id: r.id, brand: r.brand, product: r.product, sku: r.sku ?? '', unit: r.unit ?? 'case', onHand: num(r.on_hand), incoming: num(r.incoming),
+  incomingDate: r.incoming_date ?? null, expiryDate: r.expiry_date ?? null, updatedAt: r.updated_at,
+})
 const quoteFrom = (r: Row): Quote => ({
   id: r.id, quoteNo: r.quote_no, accountId: r.account_id, repId: r.rep_id, status: r.status, validUntil: r.valid_until ?? '', notes: r.notes ?? '',
   lines: Array.isArray(r.lines) ? r.lines : [], total: num(r.total), activityId: r.activity_id ?? null, opportunityId: r.opportunity_id ?? null, createdAt: r.created_at,
@@ -163,6 +171,9 @@ export async function loadAll(): Promise<DB> {
       ;(signed ?? []).forEach(s => { if (s.path && s.signedUrl) photoUrls[s.path] = s.signedUrl })
     }
   } catch { photoRows = [] }
+  // orders and stock arrive with migration 009
+  let orderRows: Row[] = [], stockRows: Row[] = []
+  try { orderRows = await fetchAll<Row>('orders'); stockRows = await fetchAll<Row>('stock_items', 'product') } catch { orderRows = []; stockRows = [] }
   let tgts: Row[] = []
   try { tgts = await fetchAll<Row>('rep_targets', 'month') } catch { tgts = [] }
 
@@ -179,7 +190,7 @@ export async function loadAll(): Promise<DB> {
     messageReads: reads.map(r => ({ messageId: r.message_id, userId: r.user_id, readAt: r.read_at })),
     profiles: profiles.map(profileFrom), sales: sales.map(salesFrom), accounts: accounts.map(accountFrom), activities: activities.map(activityFrom),
     opportunities: opps.map(oppFrom), promotions: promos.map(p => promoFrom(p, links)), competitors: comps.map(c => compFrom(c, urls)),
-    routePlans: plans.map(planFrom), routeVisits: visits.map(visitFrom),
+    routePlans: plans.map(planFrom), routeVisits: visits.map(visitFrom), orders: orderRows.map(orderFrom), stock: stockRows.map(stockFrom),
   }
 }
 
@@ -288,6 +299,19 @@ export const remote = {
     })
     fail('save quote', error)
   },
+  async saveOrder(o: Order) {
+    const { error } = await sb().from('orders').upsert({
+      id: o.id, order_no: o.orderNo, account_id: o.accountId, rep_id: o.repId || null, status: o.status, delivery_date: o.deliveryDate || null, notes: o.notes,
+      lines: o.lines, total: o.total, quote_id: o.quoteId ?? null,
+    })
+    fail('save order', error)
+  },
+  async deleteOrder(id: string) { const { error } = await sb().from('orders').delete().eq('id', id); fail('delete order', error) },
+  async saveStock(list: StockItem[]) {
+    const { error } = await sb().from('stock_items').upsert(list.map(s => ({ id: s.id, brand: s.brand, product: s.product, sku: s.sku, unit: s.unit, on_hand: s.onHand, incoming: s.incoming, incoming_date: s.incomingDate, expiry_date: s.expiryDate, updated_at: s.updatedAt })))
+    fail('save stock', error)
+  },
+  async deleteStock(id: string) { const { error } = await sb().from('stock_items').delete().eq('id', id); fail('delete stock', error) },
   async deleteQuote(id: string) { const { error } = await sb().from('quotes').delete().eq('id', id); fail('delete quote', error) },
   async saveTarget(t: RepTarget) {
     const { error } = await sb().from('rep_targets').upsert(

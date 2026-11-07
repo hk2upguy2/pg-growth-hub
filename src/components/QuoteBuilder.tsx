@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { Field, Modal, useAction } from './ui'
-import { OverdueWarning } from './AccountSnapshot'
+import { CreditCheck, OverdueWarning } from './AccountSnapshot'
 import { MAX_REP_DISCOUNT, Quote, QuoteLine, QuoteStatus, lineTotal, quoteTotal } from '../types'
 import { money, toDateStr } from '../lib/utils'
 
@@ -44,6 +44,7 @@ export function QuoteBuilder({ open, onClose, quote, defaultAccountId }: { open:
           </select>
         </Field>
         <OverdueWarning account={acct} />
+        <CreditCheck account={acct} orderTotal={total} />
         {priceItems.length === 0 && <div className="text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">The price list is empty. Management can add products under Price List.</div>}
 
         {!locked && (

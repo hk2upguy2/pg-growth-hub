@@ -75,6 +75,21 @@ export function AccountSnapshot({ a, sales, acts, opps, promotions }: { a: Accou
 }
 
 /** Shown wherever a rep is about to take an order or quote for a customer who owes overdue money. */
+/** Warns before an order or quote: on hold, over credit limit, or would go over it. */
+export function CreditCheck({ account, orderTotal = 0 }: { account?: Account; orderTotal?: number }) {
+  if (!account) return null
+  const limit = account.creditLimit ?? 0, owed = account.balanceDue ?? 0, after = owed + orderTotal
+  const msgs: { text: string; red: boolean }[] = []
+  if (account.status === 'On Hold') msgs.push({ text: `${account.name} is ON HOLD. Do not take an order without management approval.`, red: true })
+  if (limit > 0 && owed >= limit) msgs.push({ text: `Over the credit limit: owes ${money(owed)} against a limit of ${money(limit)}.`, red: true })
+  else if (limit > 0 && after > limit) msgs.push({ text: `This order would take them over their credit limit: ${money(owed)} owed + ${money(orderTotal)} = ${money(after)} against ${money(limit)}.`, red: false })
+  else if (limit > 0 && after > limit * 0.9) msgs.push({ text: `Close to the credit limit: ${money(after)} of ${money(limit)} after this order.`, red: false })
+  if (!msgs.length) return null
+  return <>{msgs.map((m, i) => (
+    <div key={i} className={`rounded-lg border text-sm px-3 py-2 flex items-start gap-2 ${m.red ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+      <AlertTriangle size={16} className="mt-0.5 shrink-0" /><div>{m.text}</div></div>))}</>
+}
+
 export function OverdueWarning({ account }: { account?: Account }) {
   if (!account || (account.overdueBalance ?? 0) <= 0) return null
   return (

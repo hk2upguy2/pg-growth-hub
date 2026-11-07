@@ -121,6 +121,7 @@ export interface Account {
   balanceUpdated?: string | null
   balanceDue?: number
   overdueBalance?: number
+  creditLimit?: number // 0 or missing = no limit set
 }
 
 export interface Activity {
@@ -265,6 +266,17 @@ export interface Quote {
   id: string; quoteNo: string; accountId: string; repId: string; status: QuoteStatus; validUntil: string; notes: string
   lines: QuoteLine[]; total: number; activityId?: string | null; opportunityId?: string | null; createdAt: string
 }
+export type OrderStatus = 'Submitted' | 'Confirmed' | 'Delivered' | 'Cancelled'
+export const ORDER_STATUSES: OrderStatus[] = ['Submitted', 'Confirmed', 'Delivered', 'Cancelled']
+export interface Order {
+  id: string; orderNo: string; accountId: string; repId: string; status: OrderStatus; deliveryDate: string; notes: string
+  lines: QuoteLine[]; total: number; quoteId?: string | null; createdAt: string
+}
+/** One line of warehouse stock. expiryDate is the soonest expiry among the units on hand. */
+export interface StockItem {
+  id: string; brand: BrandName; product: string; sku: string; unit: string
+  onHand: number; incoming: number; incomingDate: string | null; expiryDate: string | null; updatedAt: string
+}
 export const PHOTO_TAGS = ['Shelf survey', 'Display check', 'Competitor', 'Delivery / stock', 'Other'] as const
 export type PhotoTag = (typeof PHOTO_TAGS)[number]
 export interface Photo {
@@ -298,4 +310,6 @@ export interface DB {
   competitors: CompetitorRecord[]
   routePlans: RoutePlan[]
   routeVisits: RouteVisit[]
+  orders: Order[]
+  stock: StockItem[]
 }

@@ -19,6 +19,18 @@ function Bar({ actual, target, fmt = (n: number) => String(n) }: { actual: numbe
   )
 }
 
+/** Weighted score: sales 60%, visits 20%, new accounts 20%. Only measures that have a target count. */
+export function incentive(r: { salesAct: number; salesT: number; visits: number; visitsT: number; newAcc: number; newT: number }) {
+  const parts: [number, number][] = []
+  if (r.salesT > 0) parts.push([0.6, Math.min(1.2, r.salesAct / r.salesT)])
+  if (r.visitsT > 0) parts.push([0.2, Math.min(1.2, r.visits / r.visitsT)])
+  if (r.newT > 0) parts.push([0.2, Math.min(1.2, r.newAcc / r.newT)])
+  const w = parts.reduce((n, p) => n + p[0], 0)
+  if (!w) return { score: null as number | null, tier: '' }
+  const score = Math.round((parts.reduce((n, p) => n + p[0] * p[1], 0) / w) * 100)
+  return { score, tier: score >= 100 ? 'Gold' : score >= 85 ? 'Silver' : score >= 70 ? 'Bronze' : '' }
+}
+
 export default function Scorecard() {
   const { profiles, accounts, activities, opportunities, sales, targets, isAdmin, user, saveTarget } = useStore()
   const run = useAction()
@@ -56,7 +68,7 @@ export default function Scorecard() {
       {rows.length === 0 ? <div className="card p-8"><EmptyState title="No sales reps yet" hint="Reps appear here after they sign up." /></div> : (
         <div className="card overflow-x-auto">
           <table className="w-full min-w-[820px]">
-            <thead><tr><th className="th w-10">#</th><th className="th">Rep</th><th className="th">Sales</th><th className="th">Customer visits</th><th className="th">New accounts</th><th className="th">Weighted pipeline</th></tr></thead>
+            <thead><tr><th className="th w-10">#</th><th className="th">Rep</th><th className="th">Sales</th><th className="th">Customer visits</th><th className="th">New accounts</th><th className="th">Weighted pipeline</th><th className="th">Incentive</th></tr></thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.rep.id} className="align-top">
@@ -69,12 +81,13 @@ export default function Scorecard() {
                   <td className="td"><Bar actual={r.newAcc} target={r.newT} />
                     {isAdmin && <input aria-label={`New accounts target for ${r.rep.name}`} type="number" min={0} className="input !py-1 mt-2 w-24" defaultValue={r.newT || ''} key={`n${month}${r.newT}`} placeholder="New" onBlur={e => { if (Number(e.target.value) !== r.newT) setT(r, { newAccountsTarget: Number(e.target.value) }) }} />}</td>
                   <td className="td"><div className="font-semibold text-navy-900">{money(Math.round(r.pipeline))}</div><div className="text-xs text-slate-500">{r.won} won</div></td>
+                  <td className="td">{(() => { const i = incentive(r); return i.score === null ? <span className="text-xs text-slate-400">no targets</span> : <><div className="font-semibold text-navy-900">{i.score} pts</div>{i.tier ? <Badge tone={i.tier === 'Gold' ? 'Active' : i.tier === 'Silver' ? 'Planned' : 'On Hold'}>{i.tier}</Badge> : <span className="text-xs text-slate-500">below Bronze</span>}</> })()}</td>
                 </tr>))}
             </tbody>
           </table>
         </div>
       )}
-      <p className="text-xs text-slate-500 mt-3">Sales = Sage sales for the month on each rep's accounts. Visits = logged Customer Visit activities. New accounts = accounts created that month. <Badge tone="Active">Green</Badge> 100%+ · <Badge tone="On Hold">Amber</Badge> 70–99% · <Badge tone="Lost">Red</Badge> under 70%.{isAdmin && ' Edit a target box and click away to save it for the selected month.'}</p>
+      <p className="text-xs text-slate-500 mt-3"><strong>Incentive points</strong> = sales 60% + visits 20% + new accounts 20% of target (each capped at 120%). Gold 100+, Silver 85+, Bronze 70+. These tiers are a starting point: tell us your real plan and they can be changed. Sales = Sage sales for the month on each rep's accounts. Visits = logged Customer Visit activities. New accounts = accounts created that month. <Badge tone="Active">Green</Badge> 100%+ · <Badge tone="On Hold">Amber</Badge> 70–99% · <Badge tone="Lost">Red</Badge> under 70%.{isAdmin && ' Edit a target box and click away to save it for the selected month.'}</p>
     </>
   )
 }
