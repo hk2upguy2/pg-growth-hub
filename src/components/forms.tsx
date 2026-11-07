@@ -5,6 +5,7 @@ import {
 } from '../types'
 import { useStore } from '../lib/store'
 import { OverdueWarning } from './AccountSnapshot'
+import { VoiceButton } from './VoiceButton'
 import { Field, Modal, useAction } from './ui'
 import { nowISO, toDateStr, toLocalInput } from '../lib/utils'
 
@@ -142,7 +143,7 @@ export function ActivityForm({ open, onClose, activity, defaultAccountId, defaul
               {(isAdmin ? reps : profiles.filter(p => p.id === user?.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
-          <Field label="Discussion summary *" className="sm:col-span-2"><textarea required rows={3} className="input" value={f.summary} onChange={e => set('summary', e.target.value)} /></Field>
+          <Field label="Discussion summary *" className="sm:col-span-2"><div className="mb-1"><VoiceButton onText={t => set('summary', (f.summary ? f.summary + ' ' : '') + t)} /></div><textarea required rows={3} className="input" value={f.summary} onChange={e => set('summary', e.target.value)} /></Field>
           <Field label="Products discussed" className="sm:col-span-2"><input className="input" value={f.products} onChange={e => set('products', e.target.value)} placeholder="e.g. Party Wings, Hostess endcap" /></Field>
           <Field label="Outcome"><input className="input" value={f.outcome} onChange={e => set('outcome', e.target.value)} /></Field>
           <Field label="Next action"><input className="input" value={f.nextAction} onChange={e => set('nextAction', e.target.value)} /></Field>

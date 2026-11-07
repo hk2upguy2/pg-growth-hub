@@ -6,7 +6,12 @@ import { Modal, useToast } from './ui'
 import { daysFromNowStr, nowISO } from '../lib/utils'
 import { hasSupabase } from '../lib/supabase'
 import { PRIORITY_ORDER } from '../lib/seed'
+import { VoiceButton } from './VoiceButton'
 import { PhotoPicker, PendingPhotos, emptyPhotos } from './PhotoPicker'
+
+/** Anything in the app can open the visit log: openLogVisit(accountId) */
+export const LOG_VISIT_EVENT = 'pg:log-visit'
+export const openLogVisit = (accountId?: string) => window.dispatchEvent(new CustomEvent(LOG_VISIT_EVENT, { detail: { accountId } }))
 
 const OUTCOMES = ['Order placed', 'Interested', 'Wants quotation', 'Needs follow-up', 'Not interested', 'Not available']
 const QUEUE_KEY = 'pg-growth-hub:visit-queue:v1'
@@ -20,6 +25,7 @@ export function QuickVisit({ preselect }: { preselect?: string }) {
   const { accounts, saveActivity, addPhotos, user } = useStore()
   const toast = useToast()
   const [open, setOpen] = useState(false)
+  const [forced, setForced] = useState<string | undefined>()
   const [pending, setPending] = useState(() => readQueue().length)
   const [online, setOnline] = useState(() => navigator.onLine)
 
@@ -42,9 +48,10 @@ export function QuickVisit({ preselect }: { preselect?: string }) {
   useEffect(() => {
     const up = () => { setOnline(true); flush() }
     const down = () => setOnline(false)
-    window.addEventListener('online', up); window.addEventListener('offline', down)
+    const openFor = (e: Event) => { setForced((e as CustomEvent<{ accountId?: string }>).detail?.accountId); setOpen(true) }
+    window.addEventListener('online', up); window.addEventListener('offline', down); window.addEventListener(LOG_VISIT_EVENT, openFor)
     if (navigator.onLine) flush()
-    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down) }
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); window.removeEventListener(LOG_VISIT_EVENT, openFor) }
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) return null
@@ -55,11 +62,11 @@ export function QuickVisit({ preselect }: { preselect?: string }) {
           <CloudOff size={14} /> {online ? `${pending} visit${pending > 1 ? 's' : ''} waiting to send` : `Offline${pending ? ` · ${pending} visit${pending > 1 ? 's' : ''} waiting` : ''}`}
         </div>
       )}
-      <button onClick={() => setOpen(true)} aria-label="Log a visit"
-        className="fixed z-40 right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] rounded-full bg-navy-700 hover:bg-navy-800 text-white shadow-lg px-5 py-3.5 flex items-center gap-2 font-semibold">
+      <button onClick={() => { setForced(undefined); setOpen(true) }} aria-label="Log a visit"
+        className="hidden lg:flex fixed z-40 right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] rounded-full bg-navy-700 hover:bg-navy-800 text-white shadow-lg px-5 py-3.5 flex items-center gap-2 font-semibold">
         <Plus size={20} /> Log visit
       </button>
-      {open && <QuickVisitModal preselect={preselect} offline={!online && hasSupabase} onClose={() => setOpen(false)} onQueued={() => setPending(readQueue().length)} />}
+      {open && <QuickVisitModal preselect={forced ?? preselect} offline={!online && hasSupabase} onClose={() => { setOpen(false); setForced(undefined) }} onQueued={() => setPending(readQueue().length)} />}
     </>
   )
 }
@@ -128,7 +135,7 @@ function QuickVisitModal({ preselect, offline, onClose, onQueued }: { preselect?
           </div>
         </div>
         <PhotoPicker value={photos} onChange={setPhotos} />
-        <div><div className="label">Note (optional)</div><textarea rows={2} className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Anything worth remembering" /></div>
+        <div><div className="flex items-center justify-between mb-1"><div className="label !mb-0">Note (optional)</div><VoiceButton onText={t => setNote(n => (n ? n + ' ' : '') + t)} /></div><textarea rows={2} className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Anything worth remembering" /></div>
         {offline && <div className="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">You are offline. This visit will be saved on your phone and sent automatically when you are back online.</div>}
         <div className="flex justify-end gap-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={!accountId || !outcome} onClick={save}>Save visit</button></div>
       </div>

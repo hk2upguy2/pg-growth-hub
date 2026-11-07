@@ -17,6 +17,7 @@ import Competitors from './pages/Competitors'
 import Quotes from './pages/Quotes'
 import PriceList from './pages/PriceList'
 import Insights from './pages/Insights'
+import Today from './pages/Today'
 import Orders from './pages/Orders'
 import VillageBoard from './pages/VillageBoard'
 import Stock from './pages/Stock'
@@ -30,6 +31,12 @@ import Reports from './pages/Reports'
 import Users from './pages/Users'
 import SettingsPage from './pages/Settings'
 
+/** Managers land on the dashboard; reps land on Today. */
+function Home() {
+  const { isAdmin } = useStore()
+  return isAdmin ? <Dashboard /> : <Today />
+}
+
 export default function App() {
   const { user, isAdmin, loading } = useStore()
   if (loading) return <div className="min-h-full flex items-center justify-center text-slate-500 text-sm">Loading PG Growth Hub…</div>
@@ -37,7 +44,8 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/accounts/import" element={isAdmin ? <ImportAccounts /> : <Navigate to="/accounts" replace />} />
         <Route path="/accounts/sales-update" element={isAdmin ? <SalesImport /> : <Navigate to="/accounts" replace />} />

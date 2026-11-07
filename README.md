@@ -138,3 +138,9 @@ Run `supabase/migrations/009_orders_stock_credit.sql` in the Supabase SQL Editor
 - **Village Board**: every village at a glance (sales, buying, stopped ordering, not visited in 30+ days).
 - **Scorecard**: incentive points and Gold / Silver / Bronze tiers (sales 60%, visits 20%, new accounts 20%). Tiers are a starting point, not your real plan.
 - Sage sync: now also carries CreditLimit.
+
+## v14: voice notes, Today screen, friendlier navigation
+- **Voice notes**: a Speak button next to visit notes, activity summaries and message replies. Uses the phone's built-in speech recognition (Chrome / Safari); needs a connection, and the button is hidden on browsers without it. The first time, the browser asks permission to use the microphone. Text can be edited after.
+- **Today screen**: reps now land on Today: Log a visit, today's route, follow-ups due (with Mark done), due to reorder, stopped ordering, owes money. Every customer row has Call, Directions and Visit buttons. Managers still land on the Dashboard; reps keep their numbers under My Numbers.
+- **Menu**: grouped (My day, Customers, Selling, Performance, Market, Admin). On phones there is a bottom bar: Today, Customers, Log visit, Messages, More. Buttons and fields are larger on phones, and field text is 16px so iPhones do not zoom in.
+- No database changes in v14.
