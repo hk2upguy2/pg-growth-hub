@@ -85,9 +85,9 @@ function DemoLogin() {
           <button key={p.id} onClick={() => login(p.id)} className="w-full text-left rounded-lg border border-slate-200 hover:border-navy-400 hover:bg-navy-50 px-4 py-3 transition">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-navy-900 text-sm">{p.name}</span>
-              <Badge tone={p.role === 'admin' ? 'A+' : 'A'}>{p.role === 'admin' ? 'Management' : 'Sales Rep'}</Badge>
+              <Badge tone={p.role === 'admin' ? 'A+' : 'A'}>{p.role === 'admin' ? 'Management' : p.role === 'service' ? 'Customer Service' : 'Sales Rep'}</Badge>
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">{p.role === 'admin' ? 'All accounts, users and reports' : `Territory: ${p.territory}`}</div>
+            <div className="text-xs text-slate-500 mt-0.5">{p.role === 'admin' ? 'All accounts, users and reports' : p.role === 'service' ? 'All orders, to confirm and deliver' : `Territory: ${p.territory}`}</div>
           </button>
         ))}
       </div>

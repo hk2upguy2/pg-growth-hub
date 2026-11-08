@@ -33,8 +33,8 @@ import SettingsPage from './pages/Settings'
 
 /** Managers land on the dashboard; reps land on Today. */
 function Home() {
-  const { isAdmin } = useStore()
-  return isAdmin ? <Dashboard /> : <Today />
+  const { isAdmin, isService } = useStore()
+  return isAdmin ? <Dashboard /> : isService ? <Orders /> : <Today />
 }
 
 export default function App() {

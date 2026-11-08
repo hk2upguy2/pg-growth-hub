@@ -18,6 +18,7 @@ export function buildSeed(): DB {
   const created = new Date(Date.now() - 100 * 86400000).toISOString()
   const profiles: Profile[] = [
     { id: 'u-admin', name: 'Demo Manager', email: 'manager@demo.pg-growth-hub', role: 'admin', territory: 'All', active: true, createdAt: created },
+    { id: 'u-service', name: 'Demo Customer Service', email: 'service@demo.pg-growth-hub', role: 'service', territory: 'All', active: true, createdAt: created },
     { id: 'u-rep1', name: 'Demo Rep A (North)', email: 'rep.a@demo.pg-growth-hub', role: 'rep', territory: 'North', channel: 'Retail', active: true, createdAt: created },
     { id: 'u-rep2', name: 'Demo Rep B (Central)', email: 'rep.b@demo.pg-growth-hub', role: 'rep', territory: 'Central', channel: 'Retail', active: true, createdAt: created },
     { id: 'u-rep3', name: 'Demo Rep C (Hospitality)', email: 'rep.c@demo.pg-growth-hub', role: 'rep', territory: 'Central', channel: 'Hospitality', active: true, createdAt: created },

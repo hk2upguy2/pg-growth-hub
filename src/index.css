@@ -16,3 +16,5 @@ body { @apply bg-slate-100 text-slate-800 antialiased; font-family: Inter, ui-sa
   .th { @apply px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-50 whitespace-nowrap; }
   .td { @apply px-3 py-3 text-sm text-slate-700 border-t border-slate-100; }
 }
+
+@media print { aside, nav, header, [aria-label='Main'] { display: none !important } main { padding: 0 !important; margin: 0 !important } }

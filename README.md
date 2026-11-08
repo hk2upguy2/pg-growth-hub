@@ -161,3 +161,6 @@ Fixed the repeated transcript ("10. 10 cas. 10 cases…"). Phones send each grow
 
 ## v18
 Small "v18" tag next to the Speak button so you can see which version your phone is running (the app can keep showing an old copy until fully closed and reopened).
+
+## v19 – Customer Service role
+New role **Customer Service**: sees every order and customer (read only) and moves orders along (status and notes only). Optional email of each new order via the `order-notify` function. Setup: `docs/CUSTOMER_SERVICE.md`. Run `010_customer_service.sql` first, on its own, then `010b_customer_service_policies.sql`.

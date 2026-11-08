@@ -19,8 +19,8 @@ export default function Users() {
           <tbody>{profiles.map(p => (
             <tr key={p.id} className="hover:bg-slate-50">
               <td className="td font-medium">{p.name}</td><td className="td">{p.email}</td>
-              <td className="td"><Badge tone={p.role === 'admin' ? 'A+' : 'A'}>{p.role === 'admin' ? 'Management' : 'Sales Rep'}</Badge></td>
-              <td className="td">{p.territory ?? 'All'}</td><td className="td">{p.role === 'admin' ? '—' : p.channel === 'Retail' ? 'Retail' : p.channel === 'Hospitality' ? 'Hotel & Foodservice' : 'All accounts'}</td><td className="td">{accounts.filter(a => a.repId === p.id).length}</td>
+              <td className="td"><Badge tone={p.role === 'admin' ? 'A+' : 'A'}>{p.role === 'admin' ? 'Management' : p.role === 'service' ? 'Customer Service' : 'Sales Rep'}</Badge></td>
+              <td className="td">{p.territory ?? 'All'}</td><td className="td">{p.role !== 'rep' ? '—' : p.channel === 'Retail' ? 'Retail' : p.channel === 'Hospitality' ? 'Hotel & Foodservice' : 'All accounts'}</td><td className="td">{accounts.filter(a => a.repId === p.id).length}</td>
               <td className="td"><Badge tone={p.active ? 'Active' : 'Inactive'}>{p.active ? 'Active' : 'Deactivated'}</Badge></td>
               <td className="td">{fmtDate(p.createdAt)}</td>
               <td className="td"><button className="p-1.5 rounded hover:bg-slate-100" onClick={() => setEditing(p)}><Pencil size={16} /></button></td>
@@ -30,6 +30,7 @@ export default function Users() {
         <h3 className="font-semibold text-navy-900 mb-2">Role permissions</h3>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>Sales Representative:</strong> sees and edits only assigned accounts; logs activities; updates opportunities; plans own routes; cannot reassign accounts, manage users or delete accounts.</li>
+          <li><strong>Customer Service:</strong> sees every order and all customers (read only), moves orders from Submitted to Confirmed or Delivered, and can message the team. Cannot create orders, change order lines, see sales numbers or manage users.</li>
           <li><strong>Management / Administrator:</strong> sees all accounts and reps; assigns accounts; manages users; deletes records; exports reports.</li>
         </ul>
       </div>
@@ -47,7 +48,7 @@ function UserForm({ profile, onClose, onSave }: { profile?: Profile; onClose: ()
         <Field label="Full name *"><input required className="input" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Email *"><input required type="email" className="input" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Role"><select className="input" value={f.role} onChange={e => setF({ ...f, role: e.target.value as Role })}><option value="rep">Sales Representative</option><option value="admin">Management / Administrator</option></select></Field>
+          <Field label="Role"><select className="input" value={f.role} onChange={e => setF({ ...f, role: e.target.value as Role })}><option value="rep">Sales Representative</option><option value="service">Customer Service</option><option value="admin">Management / Administrator</option></select></Field>
           <Field label="Territory"><select className="input" value={f.territory} onChange={e => setF({ ...f, territory: e.target.value as Territory | 'All' })}><option>All</option><option>North</option><option>Central</option><option>South</option></select></Field>
         </div>
         {f.role === 'rep' && (

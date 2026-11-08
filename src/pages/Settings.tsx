@@ -56,7 +56,7 @@ export default function SettingsPage() {
           <h3 className="font-semibold text-navy-900">Your profile</h3>
           <div><span className="text-slate-500">Name:</span> {user?.name}</div>
           <div><span className="text-slate-500">Email:</span> {user?.email}</div>
-          <div><span className="text-slate-500">Role:</span> {user?.role === 'admin' ? 'Management / Administrator' : 'Sales Representative'}</div>
+          <div><span className="text-slate-500">Role:</span> {user?.role === 'admin' ? 'Management / Administrator' : user?.role === 'service' ? 'Customer Service' : 'Sales Representative'}</div>
           <div><span className="text-slate-500">Territory:</span> {user?.territory ?? 'All'}</div>
           <button className="btn-secondary mt-2" onClick={logout}>Sign out</button>
         </div>

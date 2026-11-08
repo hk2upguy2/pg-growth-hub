@@ -50,7 +50,9 @@ function load(): DB {
       const old = JSON.parse(raw) as DB
       // demo data saved before orders and stock existed: add the sample orders and stock
       if (!old.orders || !old.stock) { const s = buildSeed(); return { ...EMPTY, ...old, orders: old.orders ?? s.orders, stock: old.stock ?? s.stock } }
-      return { ...EMPTY, ...old }
+      const base = { ...EMPTY, ...old }
+      if (!base.profiles.some(p => p.role === 'service')) { const sv = buildSeed().profiles.find(p => p.role === 'service'); if (sv) base.profiles = [...base.profiles, sv] }   // demo data saved before Customer Service existed
+      return base
     }
   } catch { /* fall through */ }
   const seed = buildSeed()
@@ -61,6 +63,8 @@ function load(): DB {
 interface Ctx {
   user: Profile | null
   isAdmin: boolean
+  /** Customer Service login: sees every order, can move it along, cannot create or change lines */
+  isService: boolean
   loading: boolean
   offlineSince: string | null
   mfaPending: boolean
@@ -211,6 +215,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return null
   }, [mfaFactorId, refresh])
   const isAdmin = user?.role === 'admin'
+  const isService = user?.role === 'service'
 
   // record when each person last opened the app (shown to management under Team Activity)
   const seenFor = useMemo(() => ({ id: '' }), [])
@@ -247,6 +252,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const scoped = useMemo(() => {
     if (!user) return { sales: [], accounts: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], photos: [], priceItems: [], quotes: [], messages: [], messageReads: [], targets: [], audit: [], orders: [], stock: [] } as Omit<DB, 'profiles'>
     if (isAdmin) return db
+    if (isService) return { ...db, orders: db.orders, accounts: db.accounts, priceItems: db.priceItems.filter(p => p.active), stock: db.stock,
+      sales: [], activities: [], opportunities: [], promotions: [], competitors: [], routePlans: [], routeVisits: [], photos: [], quotes: [], targets: [], audit: [],
+      messages: db.messages.filter(m => m.recipientId === null || m.recipientId === user.id || m.senderId === user.id), messageReads: db.messageReads.filter(r => r.userId === user.id) }
     const myAccounts = db.accounts.filter(a => a.repId === user.id && channelAllows(user.channel, a.type))
     const ids = new Set(myAccounts.map(a => a.id))
     const typeOk = (accountId: string) => { const a = db.accounts.find(x => x.id === accountId); return !a || channelAllows(user.channel, a.type) }
@@ -272,7 +280,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       audit: [],
       messageReads: db.messageReads.filter(r => r.userId === user.id),
     }
-  }, [db, user, isAdmin])
+  }, [db, user, isAdmin, isService])
 
   const profiles = useMemo(
     () => (isAdmin ? db.profiles : db.profiles.filter(p => p.id === user?.id || p.role === 'admin' || scoped.accounts.length >= 0)),
@@ -706,6 +714,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
   const saveOrder: Ctx['saveOrder'] = o => {
     const u = need()
+    if (u.role === 'service') {   // customer service only moves an existing order along (status and notes)
+      const ex = o.id ? db.orders.find(x => x.id === o.id) : undefined
+      if (!ex) throw new Error('Customer service cannot create orders')
+      const upd: Order = { ...ex, status: o.status ?? ex.status, notes: o.notes }
+      setDb(d => ({ ...d, orders: d.orders.map(x => (x.id === upd.id ? upd : x)) }))
+      if (hasSupabase) persist(() => remote.saveOrder(upd), refresh)
+      audit('UPDATE', 'orders', upd.id, `${upd.orderNo} · ${accountName(upd.accountId)} · ${upd.status}`, null)
+      return upd
+    }
     assertAccount(u, o.accountId)
     if (!o.lines.length) throw new Error('Add at least one product to the order')
     if (o.lines.some(l => !(l.qty > 0) || l.price < 0)) throw new Error('Every line needs a quantity above zero')
@@ -926,7 +943,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
 
   const value: Ctx = {
-    user, isAdmin: !!isAdmin, loading, offlineSince, mfaPending: !!mfaFactorId, verifyMfa, login, logout, signIn, signUp,
+    user, isAdmin: !!isAdmin, isService: !!isService, loading, offlineSince, mfaPending: !!mfaFactorId, verifyMfa, login, logout, signIn, signUp,
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,

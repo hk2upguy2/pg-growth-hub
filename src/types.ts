@@ -1,4 +1,4 @@
-export type Role = 'rep' | 'admin'
+export type Role = 'rep' | 'admin' | 'service'
 export type AccountType = 'Retail' | 'Foodservice' | 'Hotel' | 'Institutional'
 export type Priority = 'A+' | 'A' | 'B' | 'C'
 export type AccountStatus = 'Prospect' | 'Active' | 'Inactive' | 'On Hold'

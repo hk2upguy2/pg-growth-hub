@@ -8,7 +8,7 @@ import { MAX_REP_DISCOUNT, Order, OrderStatus, ORDER_STATUSES, Quote, QuoteLine,
 import { daysFromNowStr, money } from '../lib/utils'
 
 export function OrderForm({ open, onClose, order, fromQuote, defaultAccountId }: { open: boolean; onClose: () => void; order?: Order; fromQuote?: Quote; defaultAccountId?: string }) {
-  const { accounts, priceItems, stock, saveOrder, isAdmin } = useStore()
+  const { accounts, priceItems, stock, saveOrder, isAdmin, isService } = useStore()
   const run = useAction()
   const [accountId, setAccountId] = useState(order?.accountId ?? fromQuote?.accountId ?? defaultAccountId ?? '')
   const [lines, setLines] = useState<QuoteLine[]>(order?.lines ?? fromQuote?.lines ?? [])
@@ -27,7 +27,7 @@ export function OrderForm({ open, onClose, order, fromQuote, defaultAccountId }:
   }
   const upd = (i: number, patch: Partial<QuoteLine>) => setLines(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)))
   const submit = () => {
-    const r = run(() => saveOrder({ id: order?.id, accountId, status: isAdmin ? status : undefined, deliveryDate: delivery, notes, lines, quoteId: fromQuote?.id ?? order?.quoteId }),
+    const r = run(() => saveOrder({ id: order?.id, accountId, status: isAdmin || isService ? status : undefined, deliveryDate: delivery, notes, lines, quoteId: fromQuote?.id ?? order?.quoteId }),
       order ? 'Order updated' : 'Order submitted and logged as an activity')
     if (r) onClose()
   }
@@ -73,12 +73,12 @@ export function OrderForm({ open, onClose, order, fromQuote, defaultAccountId }:
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Requested delivery date"><input type="date" className="input" value={delivery} disabled={locked} onChange={e => setDelivery(e.target.value)} /></Field>
-          {isAdmin && order && <Field label="Status"><select className="input" value={status} onChange={e => setStatus(e.target.value as OrderStatus)}>{ORDER_STATUSES.map(s => <option key={s}>{s}</option>)}</select></Field>}
-          <Field label="Notes for the office" className="sm:col-span-2"><textarea rows={2} className="input" value={notes} disabled={locked} onChange={e => setNotes(e.target.value)} placeholder="Delivery instructions, receiving hours, PO number…" /></Field>
+          {(isAdmin || isService) && order && <Field label="Status"><select className="input" value={status} onChange={e => setStatus(e.target.value as OrderStatus)}>{ORDER_STATUSES.map(s => <option key={s}>{s}</option>)}</select></Field>}
+          <Field label="Notes for the office" className="sm:col-span-2"><textarea rows={2} className="input" value={notes} disabled={locked && !isService} onChange={e => setNotes(e.target.value)} placeholder="Delivery instructions, receiving hours, PO number…" /></Field>
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{locked ? 'Close' : 'Cancel'}</button>
-          {!locked && <button type="button" className="btn-primary" disabled={!accountId || !lines.length} onClick={submit}>{order ? 'Save changes' : 'Submit order'}</button>}
+          {(!locked || (isService && !!order)) && <button type="button" className="btn-primary" disabled={!accountId || !lines.length} onClick={submit}>{order ? 'Save changes' : 'Submit order'}</button>}
         </div>
       </div>
     </Modal>
