@@ -4,6 +4,7 @@ import { Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { Badge, ConfirmButton, EmptyState, PageHeader, useAction } from '../components/ui'
 import { OrderForm } from '../components/OrderForm'
+import { OrderDetail } from '../components/OrderDetail'
 import { exportCSV, fmtDate, money } from '../lib/utils'
 import { ORDER_STATUSES, Order } from '../types'
 
@@ -56,13 +57,13 @@ export default function Orders() {
             <thead><tr><th className="th">Order</th><th className="th">Customer</th>{office && <th className="th">Rep</th>}<th className="th">Placed</th><th className="th">Delivery</th><th className="th text-right">Total</th><th className="th">Status</th><th className="th" /></tr></thead>
             <tbody>{rows.map(o => (
               <tr key={o.id}>
-                <td className="td font-medium">{o.orderNo}</td>
+                <td className="td font-medium"><button className="text-navy-700 hover:underline" onClick={() => setEdit(o)}>{o.orderNo}</button></td>
                 <td className="td"><Link className="text-navy-700 hover:underline" to={`/account/${o.accountId}`}>{accountName(o.accountId)}</Link></td>
                 {office && <td className="td">{repName(o.repId)}</td>}
                 <td className="td">{fmtDate(o.createdAt)}</td><td className="td">{o.deliveryDate ? fmtDate(o.deliveryDate) : '—'}</td>
                 <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge></td>
                 <td className="td whitespace-nowrap">
-                  <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label={office ? 'Edit' : 'View'} onClick={() => setEdit(o)}><Pencil size={16} /></button>
+                  <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label={isAdmin ? 'Edit' : 'View'} onClick={() => setEdit(o)}><Pencil size={16} /></button>
                   {isAdmin && <ConfirmButton className="text-slate-400 hover:text-red-600" message={`Delete order ${o.orderNo}?`} onConfirm={() => run(() => deleteOrder(o.id), 'Order deleted')}><Trash2 size={16} /></ConfirmButton>}
                 </td>
               </tr>))}</tbody>
@@ -70,7 +71,7 @@ export default function Orders() {
         </div>
       )}
       {(creating || fromQuote) && <OrderForm open onClose={close} fromQuote={fromQuote} />}
-      {edit && <OrderForm key={edit.id + edit.status} open order={edit} onClose={() => setEdit(undefined)} />}
+      {edit && (isAdmin ? <OrderForm key={edit.id + edit.status} open order={edit} onClose={() => setEdit(undefined)} /> : <OrderDetail key={edit.id + edit.status} order={edit} onClose={() => setEdit(undefined)} />)}
     </>
   )
 }

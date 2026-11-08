@@ -164,3 +164,6 @@ Small "v18" tag next to the Speak button so you can see which version your phone
 
 ## v19 – Customer Service role
 New role **Customer Service**: sees every order and customer (read only) and moves orders along (status and notes only). Optional email of each new order via the `order-notify` function. Setup: `docs/CUSTOMER_SERVICE.md`. Run `010_customer_service.sql` first, on its own, then `010b_customer_service_policies.sql`.
+
+## v20 – Order detail view
+Customer service (and reps viewing their own orders) now get a clear read-only order page: customer, contact, phone, address, rep, delivery date, every line with stock, total, overdue/On Hold warnings and a Print button. Customer service can change the status and notes there. Click the order number to open it. No database changes.
