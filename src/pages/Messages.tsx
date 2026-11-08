@@ -30,7 +30,7 @@ function ReplyBox({ placeholder = 'Write a reply…', onSend, extra }: { placeho
     <form onSubmit={submit} className="mt-3 border-t border-slate-200 pt-3 space-y-2" onClick={e => e.stopPropagation()}>
       {extra}
       <textarea className="input min-h-[70px]" value={text} maxLength={4000} placeholder={placeholder} onChange={e => setText(e.target.value)} />
-      <div className="flex justify-between items-center"><VoiceButton onText={t => setText(x => (x ? x + ' ' : '') + t)} /><button className="btn-primary" disabled={!text.trim()}><CornerDownRight size={15} /> Reply</button></div>
+      <div className="flex justify-between items-center"><VoiceButton value={text} onChange={setText} /><button className="btn-primary" disabled={!text.trim()}><CornerDownRight size={15} /> Reply</button></div>
     </form>
   )
 }

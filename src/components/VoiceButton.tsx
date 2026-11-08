@@ -3,9 +3,10 @@ import { Mic, Square } from 'lucide-react'
 import { useToast } from './ui'
 
 /* The browser's built-in speech recognition. Not in the TypeScript DOM types, so a minimal shape is declared here. */
+type Result = ArrayLike<{ transcript: string }> & { isFinal: boolean }
 interface Rec {
   lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number
-  onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null
+  onresult: ((e: { resultIndex: number; results: ArrayLike<Result> }) => void) | null
   onerror: ((e: { error: string }) => void) | null
   onend: (() => void) | null
   start: () => void; stop: () => void
@@ -16,14 +17,39 @@ const getCtor = (): RecCtor | null => {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
+const flat = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim()
 /**
- * Tap, talk, tap again: the words are typed into the field for you. It uses the phone's own speech recognition
- * (Chrome / Safari), which needs a connection. Hidden on browsers that do not support it. Edit the text afterwards.
+ * Phones (Android Chrome especially) report every growing partial phrase as its own result:
+ * "10", "10 cas", "10 cases", "10 cases of", … Keep only the longest version of each phrase so the text is not repeated.
  */
-export function VoiceButton({ onText }: { onText: (text: string, alternatives?: string[]) => void }) {
+export function mergeResults(parts: string[]): string {
+  const out: string[] = []
+  for (const p of parts) {
+    const t = p.trim(); if (!t) continue
+    const last = out[out.length - 1]
+    if (last !== undefined) {
+      const a = flat(last), b = flat(t)
+      if (b === a || a.startsWith(b)) continue       // same or a shorter, earlier version
+      if (b.startsWith(a)) { out[out.length - 1] = t; continue }   // a longer version of the previous one
+    }
+    out.push(t)
+  }
+  const s = out.join(' ').replace(/\s+/g, ' ').trim()
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
+}
+
+/**
+ * Tap, talk, tap again: your words appear in the field as you speak. Uses the phone's own speech recognition
+ * (Chrome / Safari), which needs a connection. Hidden on browsers without it. Edit the text afterwards.
+ * `value` / `onChange` are the field it types into. `choose` can pick between the phone's alternative guesses.
+ */
+export function VoiceButton({ value, onChange, choose }: { value: string; onChange: (next: string) => void; choose?: (alternatives: string[]) => string }) {
   const toast = useToast()
   const [on, setOn] = useState(false)
   const rec = useRef<Rec | null>(null)
+  const base = useRef('')
+  const latest = useRef({ value, onChange, choose })
+  latest.current = { value, onChange, choose }
   const Ctor = typeof window !== 'undefined' ? getCtor() : null
   useEffect(() => () => { try { rec.current?.stop() } catch { /* already stopped */ } }, [])
   if (!Ctor) return null
@@ -31,15 +57,18 @@ export function VoiceButton({ onText }: { onText: (text: string, alternatives?: 
   const toggle = () => {
     if (on) { rec.current?.stop(); return }
     const r = new Ctor()
-    r.lang = 'en-US'; r.continuous = true; r.interimResults = false; r.maxAlternatives = 3
+    base.current = latest.current.value.trim()           // what was already in the field before this recording
+    r.lang = 'en-US'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 3
     r.onresult = e => {
-      const fix = (s: string) => { s = s.trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.') : '' }
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (!e.results[i].isFinal) continue
-        // the browser can offer several guesses for the same words: pass them all so the caller can pick the one that makes sense
-        const alts = Array.from({ length: e.results[i].length }, (_, k) => fix(e.results[i][k].transcript)).filter(Boolean)
-        if (alts.length) onText(alts[0], alts)
+      const parts: string[] = []
+      for (let i = 0; i < e.results.length; i++) {
+        const alts = Array.from({ length: e.results[i].length }, (_, k) => e.results[i][k].transcript.trim()).filter(Boolean)
+        if (!alts.length) continue
+        const pick = e.results[i].isFinal && alts.length > 1 && latest.current.choose ? latest.current.choose(alts) : alts[0]
+        parts.push(pick)
       }
+      const said = mergeResults(parts)
+      latest.current.onChange(base.current ? `${base.current} ${said}` : said)   // replace, never append: the phone resends the whole sentence
     }
     r.onerror = e => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this site in your browser settings to use voice.', 'err')

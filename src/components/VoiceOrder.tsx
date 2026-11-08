@@ -49,7 +49,7 @@ export function VoiceOrder({ items, onAdd }: { items: PriceItem[]; onAdd: (lines
     <div className="rounded-xl border border-navy-200 bg-navy-50/50 p-3 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="font-semibold text-navy-900 flex items-center gap-1.5"><Mic size={16} /> Say your order</div>
-        <VoiceButton onText={(t, alts) => { const best = alts && alts.length > 1 ? bestGuess(alts) : t; setText(x => (x ? x + ' ' : '') + best); setHeard(null) }} />
+        <VoiceButton value={text} choose={bestGuess} onChange={v => { setText(v); setHeard(null) }} />
       </div>
       <textarea rows={2} className="input" value={text} onChange={e => { setText(e.target.value); setHeard(null) }}
         placeholder="e.g. ten cases of party wings, five twinkies, two kikkoman soy sauce" />

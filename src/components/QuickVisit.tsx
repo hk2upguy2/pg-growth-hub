@@ -135,7 +135,7 @@ function QuickVisitModal({ preselect, offline, onClose, onQueued }: { preselect?
           </div>
         </div>
         <PhotoPicker value={photos} onChange={setPhotos} />
-        <div><div className="flex items-center justify-between mb-1"><div className="label !mb-0">Note (optional)</div><VoiceButton onText={t => setNote(n => (n ? n + ' ' : '') + t)} /></div><textarea rows={2} className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Anything worth remembering" /></div>
+        <div><div className="flex items-center justify-between mb-1"><div className="label !mb-0">Note (optional)</div><VoiceButton value={note} onChange={setNote} /></div><textarea rows={2} className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Anything worth remembering" /></div>
         {offline && <div className="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">You are offline. This visit will be saved on your phone and sent automatically when you are back online.</div>}
         <div className="flex justify-end gap-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={!accountId || !outcome} onClick={save}>Save visit</button></div>
       </div>

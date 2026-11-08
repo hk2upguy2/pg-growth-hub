@@ -155,3 +155,6 @@ No database changes.
 - The phone's several guesses for each phrase are all checked, and the one that best fits the price list is used.
 - **It learns your corrections**: if a rep changes the product it picked, the same words go straight to that product next time (stored on that phone only; "Forget" link resets it).
 - Still no AI service and no cost. Same removal steps as v15.
+
+## v17 – Voice fix
+Fixed the repeated transcript ("10. 10 cas. 10 cases…"). Phones send each growing partial phrase as its own result; the mic button now replaces instead of appending, so "10 cases of party wings" comes through once. No database changes.
