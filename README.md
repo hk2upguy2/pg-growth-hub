@@ -158,3 +158,6 @@ No database changes.
 
 ## v17 – Voice fix
 Fixed the repeated transcript ("10. 10 cas. 10 cases…"). Phones send each growing partial phrase as its own result; the mic button now replaces instead of appending, so "10 cases of party wings" comes through once. No database changes.
+
+## v18
+Small "v18" tag next to the Speak button so you can see which version your phone is running (the app can keep showing an old copy until fully closed and reopened).

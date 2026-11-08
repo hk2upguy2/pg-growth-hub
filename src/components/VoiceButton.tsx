@@ -81,7 +81,7 @@ export function VoiceButton({ value, onChange, choose }: { value: string; onChan
   return (
     <button type="button" onClick={toggle} aria-label={on ? 'Stop voice note' : 'Speak your note'} aria-pressed={on}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition ${on ? 'bg-red-600 border-red-600 text-white animate-pulse' : 'bg-white border-slate-300 text-navy-800 hover:bg-slate-50'}`}>
-      {on ? <><Square size={13} /> Listening… tap to stop</> : <><Mic size={14} /> Speak</>}
+      {on ? <><Square size={13} /> Listening… tap to stop</> : <><Mic size={14} /> Speak <span className="text-[9px] font-normal text-slate-400">v18</span></>}
     </button>
   )
 }
