@@ -1,0 +1,52 @@
+# CI/CD for PG Growth Hub.
+# Every push and pull request runs the checks below. Vercel deploys main automatically when it is pushed (that is the CD part),
+# so protect main on GitHub (Settings > Branches > require "CI" to pass) to stop a failing change from being deployed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck, unit, integration, performance, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Unit, integration and performance tests
+        run: npx vitest run
+      - name: Build (demo mode, no secrets needed)
+        run: VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= npx vite build --outDir dist-ci
+      - name: Bundle size budget
+        run: node scripts/check-bundle.mjs dist-ci
+
+  e2e:
+    name: End-to-end (real browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

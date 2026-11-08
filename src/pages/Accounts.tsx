@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Plus, Search, Upload } from 'lucide-react'
 import { useStore } from '../lib/store'
@@ -40,6 +40,9 @@ export default function Accounts({ fixedType, fixedMarket }: { fixedType?: Accou
   const [lapsedOnly, setLapsedOnly] = useState(() => sp.get('lapsed') === '1')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'priority', dir: 1 })
   const [adding, setAdding] = useState(false)
+  const [limit, setLimit] = useState(100)   // draw 100 rows at a time: a list of thousands would freeze a phone
+
+  useEffect(() => setLimit(100), [q, type, status, priority, village, rep, market, overdueOnly, stale, lapsedOnly, sort, fixedType, fixedMarket])
 
   const rows = useMemo(() => {
     const ql = q.trim().toLowerCase()
@@ -123,7 +126,7 @@ export default function Accounts({ fixedType, fixedMarket }: { fixedType?: Accou
         <table className="w-full min-w-[900px]">
           <thead><tr>{isAdmin && <th className="th w-8"><input type="checkbox" aria-label="Select all shown" checked={rows.length > 0 && rows.every(r => selected.has(r.id))} onChange={e => setSelected(e.target.checked ? new Set(rows.map(r => r.id)) : new Set())} /></th>}{th('Account', 'name')}<th className="th">Type / Segment</th><th className="th">Village</th>{th('Priority', 'priority')}{th('Status', 'status')}{th('Potential/mo', 'monthlyPotential')}<th className="th">Rep</th>{th('Last visit', 'lastVisit')}<th className="th">Next follow-up</th></tr></thead>
           <tbody>
-            {rows.map(a => (
+            {rows.slice(0, limit).map(a => (
               <tr key={a.id} className="hover:bg-slate-50">
                 {isAdmin && <td className="td w-8"><input type="checkbox" aria-label={`Select ${a.name}`} checked={selected.has(a.id)} onChange={e => setSelected(s => { const n = new Set(s); if (e.target.checked) n.add(a.id); else n.delete(a.id); return n })} /></td>}
                 <td className="td"><Link to={`/account/${a.id}`} className="font-medium text-navy-700 hover:underline">{a.name}</Link>{a.isDemo && <span className="ml-2"><DemoBadge /></span>}{(a.overdueBalance ?? 0) > 0 && <span className="ml-2 inline-block rounded bg-red-100 text-red-700 text-[10px] font-semibold px-1.5 py-0.5" title="Overdue balance">OVERDUE {money(a.overdueBalance ?? 0)}</span>}<div className="text-xs text-slate-400">{a.accountNo}</div></td>
@@ -140,6 +143,10 @@ export default function Accounts({ fixedType, fixedMarket }: { fixedType?: Accou
           </tbody>
         </table>
         {rows.length === 0 && <EmptyState title="No accounts match" hint="Adjust filters or add a new account." />}
+        {rows.length > limit && (
+          <div className="p-3 text-center text-sm text-slate-600 border-t border-slate-100">
+            Showing {limit} of {rows.length}. <button className="btn-secondary ml-2" onClick={() => setLimit(l => l + 200)}>Show more</button> <span className="text-xs text-slate-400">or type in the search box to narrow the list</span>
+          </div>)}
       </div>
       {adding && <AccountForm open onClose={() => setAdding(false)} />}
     </>

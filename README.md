@@ -173,3 +173,14 @@ Reps see 7 items (Today, Messages, My Accounts, Quotes, Orders, My Numbers, Scor
 
 ## v22
 Customer Service no longer sees the floating "Log visit" button (they do not visit customers).
+
+## v23 – Automated tests
+`npm test` runs 33 unit tests (order and quote totals, sales channels, scorecard scoring, say-your-order matching, the voice transcript fix, demo data integrity, sales-insight months). Run it before every release. Vercel's build does not run them, so a failing test never blocks a deploy; it just tells you something broke.
+
+## v24 – Testing and CI/CD
+- `npm test`: unit + integration + performance calculations (53 tests, a few seconds).
+- `npm run test:e2e`: a real browser drives the demo build (10 tests: sign-in per role, menus, the rep-orders / customer-service-confirms journey, logging a visit on a phone, a slow-phone speed test with 3,000 customers). First time only: `npx playwright install chromium`.
+- `npm run perf`: just the performance tests. `npm run ci`: everything CI runs, in order.
+- `.github/workflows/ci.yml` runs all of it on every push and pull request. Vercel deploys main when it is pushed (CD). To stop a failing change reaching customers, on GitHub go to Settings > Branches > add a rule for `main` and require the "CI" checks.
+- Tests always run in demo mode and can never touch your live Supabase data.
+- Fixed: the customer list drew every row at once (23 s on a slow phone with 3,000 customers). It now shows 100 at a time with a Show more button (2 s).
