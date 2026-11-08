@@ -167,3 +167,9 @@ New role **Customer Service**: sees every order and customer (read only) and mov
 
 ## v20 – Order detail view
 Customer service (and reps viewing their own orders) now get a clear read-only order page: customer, contact, phone, address, rep, delivery date, every line with stock, total, overdue/On Hold warnings and a Print button. Customer service can change the status and notes there. Click the order number to open it. No database changes.
+
+## v21 – Shorter menu for reps
+Reps see 7 items (Today, Messages, My Accounts, Quotes, Orders, My Numbers, Scorecard) plus a collapsible **More** section holding everything else. Nothing was removed. Management and Customer Service menus are unchanged. To move an item in or out of the short list, edit `REP_CORE` in `src/components/Layout.tsx`. No database changes.
+
+## v22
+Customer Service no longer sees the floating "Log visit" button (they do not visit customers).

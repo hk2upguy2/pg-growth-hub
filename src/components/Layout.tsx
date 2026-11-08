@@ -60,24 +60,43 @@ const GROUPS: Group[] = [
   ] },
 ]
 
+/** Reps see a short menu of what they use every day; everything else sits behind "More" (nothing is removed). */
+const REP_CORE = new Set(['/', '/messages', '/accounts', '/orders', '/quotes', '/dashboard', '/scorecard'])
+
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { isAdmin, isService, user, messages, messageReads } = useStore()
+  const { pathname } = useLocation()
   const unread = unreadMessages(user?.id, messages, messageReads).length
+  const isRep = !isAdmin && !isService
   const show = (n: Item) => isService ? !!n.svc : (!n.admin || isAdmin) && (!n.rep || !isAdmin) && (!n.type || isAdmin || channelAllows(user?.channel, n.type))
+  const visible = GROUPS.map(g => ({ ...g, items: g.items.filter(show) })).filter(g => g.items.length)
+  const inMore = (n: Item) => isRep && !REP_CORE.has(n.to)
+  const moreItems = visible.flatMap(g => g.items.filter(inMore))
+  const [open, setOpen] = useState(false)
+  const moreActive = moreItems.some(n => pathname === n.to || (n.to !== '/' && pathname.startsWith(n.to + '/')))
+  const showMore = open || moreActive
+  const label = (n: Item) => (isRep && n.to === '/accounts' && n.end ? 'My Accounts' : n.label)
+  const link = (n: Item) => (
+    <NavLink key={n.to + n.label} to={n.to} end={n.end} onClick={onNavigate}
+      className={({ isActive }) => cx('flex items-center gap-3 rounded-lg px-3 py-2.5 lg:py-2 text-[15px] lg:text-sm font-medium transition', isActive ? 'bg-white/15 text-white' : 'text-navy-200 hover:bg-white/10 hover:text-white')}>
+      <n.icon size={18} /> {label(n)}
+      {n.to === '/messages' && unread > 0 && <span className="ml-auto rounded-full bg-red-500 text-white text-xs font-semibold px-2 py-0.5">{unread}</span>}
+    </NavLink>)
   return (
     <nav className="px-3 pb-2">
-      {GROUPS.map(g => ({ ...g, items: g.items.filter(show) })).filter(g => g.items.length).map(g => (
+      {visible.map(g => ({ ...g, items: g.items.filter(n => !inMore(n)) })).filter(g => g.items.length).map(g => (
         <div key={g.title} className="mt-4 first:mt-0">
           <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-navy-400">{g.title}</div>
-          <div className="space-y-0.5">
-            {g.items.map(n => (
-              <NavLink key={n.to + n.label} to={n.to} end={n.end} onClick={onNavigate}
-                className={({ isActive }) => cx('flex items-center gap-3 rounded-lg px-3 py-2.5 lg:py-2 text-[15px] lg:text-sm font-medium transition', isActive ? 'bg-white/15 text-white' : 'text-navy-200 hover:bg-white/10 hover:text-white')}>
-                <n.icon size={18} /> {n.label}
-                {n.to === '/messages' && unread > 0 && <span className="ml-auto rounded-full bg-red-500 text-white text-xs font-semibold px-2 py-0.5">{unread}</span>}
-              </NavLink>))}
-          </div>
+          <div className="space-y-0.5">{g.items.map(link)}</div>
         </div>))}
+      {isRep && moreItems.length > 0 && (
+        <div className="mt-4">
+          <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={showMore}
+            className="w-full flex items-center justify-between px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-navy-400 hover:text-white">
+            <span>More</span><span>{showMore ? '▾' : '▸'} {moreItems.length}</span>
+          </button>
+          {showMore && <div className="space-y-0.5">{moreItems.map(link)}</div>}
+        </div>)}
     </nav>
   )
 }

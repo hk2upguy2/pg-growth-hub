@@ -62,10 +62,10 @@ export function QuickVisit({ preselect }: { preselect?: string }) {
           <CloudOff size={14} /> {online ? `${pending} visit${pending > 1 ? 's' : ''} waiting to send` : `Offline${pending ? ` · ${pending} visit${pending > 1 ? 's' : ''} waiting` : ''}`}
         </div>
       )}
-      <button onClick={() => { setForced(undefined); setOpen(true) }} aria-label="Log a visit"
+      {user.role !== 'service' && <button onClick={() => { setForced(undefined); setOpen(true) }} aria-label="Log a visit"
         className="hidden lg:flex fixed z-40 right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] rounded-full bg-navy-700 hover:bg-navy-800 text-white shadow-lg px-5 py-3.5 flex items-center gap-2 font-semibold">
         <Plus size={20} /> Log visit
-      </button>
+      </button>}
       {open && <QuickVisitModal preselect={forced ?? preselect} offline={!online && hasSupabase} onClose={() => { setOpen(false); setForced(undefined) }} onQueued={() => setPending(readQueue().length)} />}
     </>
   )
