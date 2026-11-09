@@ -184,3 +184,7 @@ Customer Service no longer sees the floating "Log visit" button (they do not vis
 - `.github/workflows/ci.yml` runs all of it on every push and pull request. Vercel deploys main when it is pushed (CD). To stop a failing change reaching customers, on GitHub go to Settings > Branches > add a rule for `main` and require the "CI" checks.
 - Tests always run in demo mode and can never touch your live Supabase data.
 - Fixed: the customer list drew every row at once (23 s on a slow phone with 3,000 customers). It now shows 100 at a time with a Show more button (2 s).
+
+## v25
+- Fixed: on phones the menu drawer's bottom section (your name and Sign out) was hidden under the bottom bar. The drawer now sits above the bar and keeps Sign out pinned in view.
+- Tests use their own port (4399) and never reuse a server that is already running, so they can't land on your live login screen.

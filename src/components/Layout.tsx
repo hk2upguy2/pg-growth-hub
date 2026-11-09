@@ -146,12 +146,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* mobile drawer */}
       {open && (
-        <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div className="w-72 max-w-[85%] bg-navy-800 flex flex-col overflow-y-auto">
-            <div className="flex items-center justify-between pr-3"><Brand />
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div className="w-72 max-w-[85%] bg-navy-800 flex flex-col h-full pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between pr-3 shrink-0"><Brand />
               <button className="text-white p-2" onClick={() => setOpen(false)} aria-label="Close menu"><X /></button></div>
-            <div className="flex-1 pb-4"><NavList onNavigate={() => setOpen(false)} /></div>
-            <UserBox onLogout={logout} />
+            <div className="flex-1 min-h-0 overflow-y-auto pb-4"><NavList onNavigate={() => setOpen(false)} /></div>
+            <div className="shrink-0"><UserBox onLogout={logout} /></div>
           </div>
           <div className="flex-1 bg-navy-900/50" onClick={() => setOpen(false)} />
         </div>
