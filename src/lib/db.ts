@@ -112,7 +112,7 @@ const messageFrom = (r: Row): Message => ({
 const priceFrom = (r: Row): PriceItem => ({ id: r.id, brand: r.brand, product: r.product, sku: r.sku ?? '', unit: r.unit ?? 'case', price: num(r.price), active: r.active !== false, updatedAt: r.updated_at })
 const orderFrom = (r: Row): Order => ({
   id: r.id, orderNo: r.order_no, accountId: r.account_id, repId: r.rep_id ?? '', status: r.status, deliveryDate: r.delivery_date ?? '', notes: r.notes ?? '',
-  lines: r.lines ?? [], total: num(r.total), quoteId: r.quote_id ?? null, createdAt: r.created_at,
+  lines: r.lines ?? [], total: num(r.total), quoteId: r.quote_id ?? null, createdAt: r.created_at, editedAt: r.edited_at ?? null,
 })
 const stockFrom = (r: Row): StockItem => ({
   id: r.id, brand: r.brand, product: r.product, sku: r.sku ?? '', unit: r.unit ?? 'case', onHand: num(r.on_hand), incoming: num(r.incoming),

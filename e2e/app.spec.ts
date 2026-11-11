@@ -60,6 +60,36 @@ test.describe('the order journey: rep takes an order, customer service confirms 
   })
 })
 
+test.describe('a rep changes a submitted order', () => {
+  test('edit is saved, flagged for customer service, and locked once confirmed', async ({ page }) => {
+    await signIn(page, 'rep'); await page.goto('/orders')
+    await page.getByRole('button', { name: /New order/ }).click()
+    const dlg = page.locator('[role=dialog], .fixed').filter({ hasText: 'New order' }).first()
+    await dlg.locator('select').first().selectOption({ index: 1 })
+    await dlg.locator('select').filter({ hasText: 'Choose…' }).first().selectOption({ index: 1 })
+    await dlg.getByRole('button', { name: /^\s*Add\s*$/ }).click()
+    await dlg.getByRole('button', { name: 'Submit order' }).click()
+    await expect(page.getByText(/Order submitted/i)).toBeVisible()
+    // reopen it and change the quantity
+    await page.locator('tbody tr').first().getByRole('button', { name: 'Edit' }).click()
+    const edit = page.locator('[role=dialog], .fixed').filter({ hasText: 'Save changes' }).first()
+    await edit.locator('input[type=number]').first().fill('7')
+    await edit.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByText('Order updated')).toBeVisible()
+    await expect(page.locator('tbody tr').first().getByText('Edited')).toBeVisible()
+    await signOut(page)
+    // customer service sees the warning, confirms; the rep can then no longer edit
+    await page.getByText(CARD.service).first().click()
+    await page.locator('tbody tr').first().getByRole('button', { name: 'View' }).click()
+    await expect(page.getByText(/The rep changed this order/)).toBeVisible()
+    await page.locator('select.input').last().selectOption('Confirmed')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await signOut(page)
+    await page.getByText(CARD.rep).first().click(); await page.goto('/orders')
+    await expect(page.locator('tbody tr').first().getByRole('button', { name: 'View' })).toBeVisible()
+  })
+})
+
 test.describe('logging a visit @phone', () => {
   test('a rep logs a visit from the phone bottom bar', async ({ page }) => {
     await signIn(page, 'rep')

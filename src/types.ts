@@ -271,6 +271,8 @@ export const ORDER_STATUSES: OrderStatus[] = ['Submitted', 'Confirmed', 'Deliver
 export interface Order {
   id: string; orderNo: string; accountId: string; repId: string; status: OrderStatus; deliveryDate: string; notes: string
   lines: QuoteLine[]; total: number; quoteId?: string | null; createdAt: string
+  /** set when the rep changed the order after submitting it, so the office re-checks it */
+  editedAt?: string | null
 }
 /** One line of warehouse stock. expiryDate is the soonest expiry among the units on hand. */
 export interface StockItem {

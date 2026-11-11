@@ -108,3 +108,34 @@ describe('sales channels and assignment', () => {
     expect(saved.creditLimit ?? 0).toBe(a.creditLimit ?? 0); expect(saved.balanceDue ?? 0).toBe(a.balanceDue ?? 0)
   })
 })
+
+describe('reps changing their own submitted order', () => {
+  const place = () => { as('u-rep1'); const acct = ctx.current.accounts[0]; return ok(() => ctx.current.saveOrder(order(acct.id, [line({ qty: 2, price: 50 })]))) }
+  it('a rep can change the lines of their own order while it is still Submitted, and the order is marked Edited', () => {
+    const o = place(); expect(o.editedAt ?? null).toBeNull()
+    const upd = ok(() => ctx.current.saveOrder({ ...order(o.accountId, [line({ qty: 5, price: 50 }), line({ product: 'Drummettes', sku: 'AG-DR', qty: 1, price: 40 })]), id: o.id, notes: 'add drummettes' }))
+    expect(upd.orderNo).toBe(o.orderNo); expect(upd.total).toBe(290); expect(upd.lines).toHaveLength(2)
+    expect(upd.status).toBe('Submitted'); expect(upd.editedAt).toBeTruthy()
+    expect(ctx.current.orders.filter(x => x.id === o.id)).toHaveLength(1)
+  })
+  it('a rep cannot change it after customer service confirms it', () => {
+    const o = place()
+    as('u-service'); ok(() => ctx.current.saveOrder({ ...order(o.accountId), id: o.id, status: 'Confirmed', notes: '' }))
+    as('u-rep1'); fails(() => ctx.current.saveOrder({ ...order(o.accountId, [line({ qty: 9 })]), id: o.id }), /already confirmed/i)
+  })
+  it('a rep cannot change the status or the customer, even on their own order', () => {
+    const o = place()
+    const upd = ok(() => ctx.current.saveOrder({ ...order(o.accountId, [line({ qty: 3 })]), id: o.id, status: 'Delivered' }))
+    expect(upd.status).toBe('Submitted')
+    as('u-admin'); const other = ctx.current.accounts.find(a => a.id !== o.accountId && a.repId === 'u-rep1')
+    as('u-rep1'); if (other) fails(() => ctx.current.saveOrder({ ...order(other.id), id: o.id }), /customer cannot be changed/i)
+  })
+  it("a rep cannot change another rep's order", () => {
+    as('u-admin'); const theirs = ctx.current.orders.find(x => x.repId !== 'u-rep1' && x.status === 'Submitted')
+    if (!theirs) return
+    as('u-rep1'); fails(() => ctx.current.saveOrder({ ...order(theirs.accountId), id: theirs.id }))
+  })
+  it('the 10% discount limit still applies when editing', () => {
+    const o = place(); fails(() => ctx.current.saveOrder({ ...order(o.accountId, [line({ discountPct: 12 })]), id: o.id }), /10%/)
+  })
+})

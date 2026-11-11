@@ -730,11 +730,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const acct = db.accounts.find(a => a.id === o.accountId)
     if (u.role !== 'admin' && acct?.status === 'On Hold') throw new Error('This account is on hold. Ask management before placing an order.')
     const existing = o.id ? db.orders.find(x => x.id === o.id) : undefined
-    if (existing && u.role !== 'admin') throw new Error('Submitted orders can only be changed by management')
+    if (existing && u.role !== 'admin') {   // a rep may change their own order until customer service confirms it
+      if (existing.repId !== u.id) throw new Error('You can only change your own orders')
+      if (existing.status !== 'Submitted') throw new Error(`This order is already ${existing.status.toLowerCase()}. Ask customer service to change it.`)
+      if (existing.accountId !== o.accountId) throw new Error('The customer cannot be changed. Cancel this order and start a new one.')
+    }
     const total = quoteTotal(o.lines), stamp = nowISO()
     const no = existing?.orderNo ?? `SO-${localDate(stamp).slice(2).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     const full: Order = { id: existing?.id ?? uid(), orderNo: no, accountId: o.accountId, repId: existing?.repId ?? (u.role === 'admin' ? acct?.repId || u.id : u.id),
-      status: u.role === 'admin' && o.status ? o.status : existing?.status ?? 'Submitted', deliveryDate: o.deliveryDate, notes: o.notes, lines: o.lines, total, quoteId: o.quoteId ?? existing?.quoteId ?? null, createdAt: existing?.createdAt ?? stamp }
+      status: u.role === 'admin' && o.status ? o.status : existing?.status ?? 'Submitted', deliveryDate: o.deliveryDate, notes: o.notes, lines: o.lines, total, quoteId: o.quoteId ?? existing?.quoteId ?? null, createdAt: existing?.createdAt ?? stamp,
+      editedAt: existing ? (u.role !== 'admin' ? stamp : existing.editedAt ?? null) : null }
     if (!existing) {
       saveActivity({ accountId: o.accountId, at: stamp, type: 'Follow-up', summary: `Order ${no}: ${o.lines.length} line${o.lines.length > 1 ? 's' : ''}, ${total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`,
         products: o.lines.map(l => l.product).join(', '), outcome: 'Order placed', nextAction: 'Confirm delivery', followUpDate: o.deliveryDate || null, followUpDone: false })

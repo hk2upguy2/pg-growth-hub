@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Printer } from 'lucide-react'
+import { ClipboardList, Printer } from 'lucide-react'
+import { printPickingSheets } from '../lib/pickingSheet'
 import { useStore } from '../lib/store'
 import { Badge, Modal, useAction } from './ui'
 import { Order, OrderStatus, ORDER_STATUSES, lineTotal } from '../types'
@@ -9,7 +10,7 @@ const tone = { Submitted: 'On Hold', Confirmed: 'Planned', Delivered: 'Active', 
 
 /** Read-only, easy-to-scan view of one order. Customer service can also change the status and add office notes. */
 export function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) {
-  const { accounts, repName, saveOrder, isService, stock } = useStore()
+  const { accounts, repName, saveOrder, isService, isAdmin, stock } = useStore()
   const run = useAction()
   const a = accounts.find(x => x.id === order.accountId)
   const [status, setStatus] = useState<OrderStatus>(order.status)
@@ -30,6 +31,7 @@ export function OrderDetail({ order, onClose }: { order: Order; onClose: () => v
           <Row k="Address" v={[a?.address, a?.village].filter(Boolean).join(', ')} />
           <Row k="Taken by" v={repName(order.repId)} />
         </div>
+        {order.editedAt && <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm p-2">The rep changed this order on {fmtDate(order.editedAt)}. Check the lines again before confirming.</div>}
         {a && (a.overdueBalance ?? 0) > 0 && <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm p-2">Overdue balance {money(a.overdueBalance ?? 0)}. Check before confirming.</div>}
         {a?.status === 'On Hold' && <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm p-2 font-semibold">This account is On Hold.</div>}
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -53,6 +55,7 @@ export function OrderDetail({ order, onClose }: { order: Order; onClose: () => v
           </div>
         ) : (order.notes ? <div className="text-sm"><span className="text-slate-500">Notes: </span><em>{order.notes}</em></div> : <Badge tone={tone[order.status]}>{order.status}</Badge>)}
         <div className="flex justify-end gap-2 print:hidden">
+          {(isService || isAdmin) && <button type="button" className="btn-secondary" onClick={() => printPickingSheets([order], { accounts, stock, repName })}><ClipboardList size={16} /> Picking sheet</button>}
           <button type="button" className="btn-secondary" onClick={() => window.print()}><Printer size={16} /> Print</button>
           <button type="button" className="btn-secondary" onClick={onClose}>{isService ? 'Cancel' : 'Close'}</button>
           {isService && <button type="button" className="btn-primary" onClick={save}>Save</button>}

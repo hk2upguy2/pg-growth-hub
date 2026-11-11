@@ -1,17 +1,20 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { ClipboardList, Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
-import { Badge, ConfirmButton, EmptyState, PageHeader, useAction } from '../components/ui'
+import { Badge, ConfirmButton, EmptyState, PageHeader, useAction, useToast } from '../components/ui'
 import { OrderForm } from '../components/OrderForm'
 import { OrderDetail } from '../components/OrderDetail'
 import { exportCSV, fmtDate, money } from '../lib/utils'
+import { printPickingSheets } from '../lib/pickingSheet'
 import { ORDER_STATUSES, Order } from '../types'
 
 const tone = { Submitted: 'On Hold', Confirmed: 'Planned', Delivered: 'Active', Cancelled: 'Lost' } as const
 
 export default function Orders() {
-  const { orders, quotes, accountName, repName, isAdmin, isService, deleteOrder } = useStore()
+  const { orders, quotes, accountName, repName, isAdmin, isService, deleteOrder, accounts, stock, user } = useStore()
+  const toast = useToast()
+  const sheets = (list: Order[]) => { if (!printPickingSheets(list, { accounts, stock, repName })) toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', 'err') }
   const run = useAction()
   const [params, setParams] = useSearchParams()
   const [status, setStatus] = useState('')
@@ -36,7 +39,8 @@ export default function Orders() {
           <input type="date" className="input !w-auto" value={day} onChange={e => setDay(e.target.value)} />
           <span className="text-sm text-slate-600">{dayOrders.length} order{dayOrders.length === 1 ? '' : 's'} · {money(dayOrders.reduce((n, o) => n + o.total, 0))}</span>
           <button className="btn-secondary ml-auto" disabled={!dayOrders.length} onClick={() => exportCSV(`pg-orders-${day}`, dayRows())}><Download size={16} /> Download</button>
-          <button className="btn-secondary" disabled={!dayOrders.length} onClick={() => window.print()}><Printer size={16} /> Print</button>
+          <button className="btn-secondary" disabled={!dayOrders.length} onClick={() => window.print()}><Printer size={16} /> Print list</button>
+          <button className="btn-primary" disabled={!dayOrders.length} onClick={() => sheets(dayOrders.filter(o => o.status !== 'Cancelled'))}><ClipboardList size={16} /> Picking sheets</button>
         </div>)}
       {office && dayOrders.length > 0 && (
         <div className="hidden print:block mb-4 text-sm">
@@ -61,9 +65,10 @@ export default function Orders() {
                 <td className="td"><Link className="text-navy-700 hover:underline" to={`/account/${o.accountId}`}>{accountName(o.accountId)}</Link></td>
                 {office && <td className="td">{repName(o.repId)}</td>}
                 <td className="td">{fmtDate(o.createdAt)}</td><td className="td">{o.deliveryDate ? fmtDate(o.deliveryDate) : '—'}</td>
-                <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge></td>
+                <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge>{o.editedAt && <span className="ml-1 text-[11px] font-semibold text-amber-700" title={`Changed by the rep on ${fmtDate(o.editedAt)}`}>Edited</span>}</td>
                 <td className="td whitespace-nowrap">
-                  <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label={isAdmin ? 'Edit' : 'View'} onClick={() => setEdit(o)}><Pencil size={16} /></button>
+                  {office && <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label="Print picking sheet" title="Print picking sheet" onClick={() => sheets([o])}><ClipboardList size={16} /></button>}
+                  <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label={isAdmin || (!isService && o.status === 'Submitted') ? 'Edit' : 'View'} onClick={() => setEdit(o)}><Pencil size={16} /></button>
                   {isAdmin && <ConfirmButton className="text-slate-400 hover:text-red-600" message={`Delete order ${o.orderNo}?`} onConfirm={() => run(() => deleteOrder(o.id), 'Order deleted')}><Trash2 size={16} /></ConfirmButton>}
                 </td>
               </tr>))}</tbody>
@@ -71,7 +76,7 @@ export default function Orders() {
         </div>
       )}
       {(creating || fromQuote) && <OrderForm open onClose={close} fromQuote={fromQuote} />}
-      {edit && (isAdmin ? <OrderForm key={edit.id + edit.status} open order={edit} onClose={() => setEdit(undefined)} /> : <OrderDetail key={edit.id + edit.status} order={edit} onClose={() => setEdit(undefined)} />)}
+      {edit && (isAdmin || (!isService && edit.repId === user?.id && edit.status === 'Submitted') ? <OrderForm key={edit.id + edit.status} open order={edit} onClose={() => setEdit(undefined)} /> : <OrderDetail key={edit.id + edit.status} order={edit} onClose={() => setEdit(undefined)} />)}
     </>
   )
 }

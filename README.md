@@ -188,3 +188,9 @@ Customer Service no longer sees the floating "Log visit" button (they do not vis
 ## v25
 - Fixed: on phones the menu drawer's bottom section (your name and Sign out) was hidden under the bottom bar. The drawer now sits above the bar and keeps Sign out pinned in view.
 - Tests use their own port (4399) and never reuse a server that is already running, so they can't land on your live login screen.
+
+## v26 – Picking sheets
+Orders can be printed as a Sage-style **Picking Sheet** (warehouse, order and customer number, sold to / ship to, terms row, item code, unit, ordered, shipped line, quantity on hand, description, lot line, brand). Customer Service and Management get a clipboard icon on every order, a **Picking sheet** button inside an open order, and a **Picking sheets** button on the Daily order list that prints every non-cancelled order of that day, one per page. It opens a clean print window (allow pop-ups for the site). Location, lot number, terms and UPC are not stored in the CRM, so they print blank (lot has a write-in line, stock expiry prints when known). To print them, they would need to come from the Sage sync. No database changes.
+
+## v27 – Reps can change their own submitted orders
+A rep can reopen their own order from **Orders** (pencil) and change the lines, delivery date and notes **until customer service confirms it**. They cannot change the customer, order number or status, the 10% discount limit still applies, and once it is Confirmed or Delivered it is locked ("ask customer service"). A changed order shows an **Edited** tag, customer service sees a banner "The rep changed this order, check the lines again", and its picking sheet is marked **REVISED ORDER**. **Run `011_rep_edit_orders.sql` in Supabase** (after 010b); it adds the permission and an `edited_at` stamp. Demo mode needs nothing.

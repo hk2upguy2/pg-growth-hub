@@ -8,7 +8,7 @@ import { MAX_REP_DISCOUNT, Order, OrderStatus, ORDER_STATUSES, Quote, QuoteLine,
 import { daysFromNowStr, money } from '../lib/utils'
 
 export function OrderForm({ open, onClose, order, fromQuote, defaultAccountId }: { open: boolean; onClose: () => void; order?: Order; fromQuote?: Quote; defaultAccountId?: string }) {
-  const { accounts, priceItems, stock, saveOrder, isAdmin, isService } = useStore()
+  const { accounts, priceItems, stock, saveOrder, isAdmin, isService, user } = useStore()
   const run = useAction()
   const [accountId, setAccountId] = useState(order?.accountId ?? fromQuote?.accountId ?? defaultAccountId ?? '')
   const [lines, setLines] = useState<QuoteLine[]>(order?.lines ?? fromQuote?.lines ?? [])
@@ -16,7 +16,8 @@ export function OrderForm({ open, onClose, order, fromQuote, defaultAccountId }:
   const [notes, setNotes] = useState(order?.notes ?? '')
   const [status, setStatus] = useState<OrderStatus>(order?.status ?? 'Submitted')
   const [pick, setPick] = useState('')
-  const locked = !!order && !isAdmin
+  const repCanEdit = !!order && !isAdmin && !isService && order.repId === user?.id && order.status === 'Submitted'   // until customer service confirms it
+  const locked = !!order && !isAdmin && !repCanEdit
   const acct = accounts.find(a => a.id === accountId)
   const total = quoteTotal(lines)
   const stockOf = useMemo(() => new Map(stock.map(s => [`${s.brand}|${s.sku || s.product}`.toLowerCase(), s])), [stock])
