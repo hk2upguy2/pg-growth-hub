@@ -194,3 +194,9 @@ Orders can be printed as a Sage-style **Picking Sheet** (warehouse, order and cu
 
 ## v27 – Reps can change their own submitted orders
 A rep can reopen their own order from **Orders** (pencil) and change the lines, delivery date and notes **until customer service confirms it**. They cannot change the customer, order number or status, the 10% discount limit still applies, and once it is Confirmed or Delivered it is locked ("ask customer service"). A changed order shows an **Edited** tag, customer service sees a banner "The rep changed this order, check the lines again", and its picking sheet is marked **REVISED ORDER**. **Run `011_rep_edit_orders.sql` in Supabase** (after 010b); it adds the permission and an `edited_at` stamp. Demo mode needs nothing.
+
+## v28 – Sage order export, and "your order was confirmed" for reps
+- **Export for Sage** (Orders page, Customer Service and Management): one CSV with a row per order line and the order header repeated: `SalesOrderNo, OrderDate, ShipExpireDate, CustomerNo, CustomerPONo, SalesPerson, WarehouseCode, Comment, LineNo, ItemCode, ItemCodeDesc, UnitOfMeasure, QuantityOrdered, ListPrice, DiscountPercent, UnitPrice`. It takes **Confirmed** orders not yet exported, marks them **In Sage** so nobody keys them twice, and reports any it had to skip (customer with no Sage customer number, or a line with no item code). A tick box re-exports ones already sent. In Sage 100, import the file with a Visual Integrator job: map these column names once and the same job works every time. Order numbers are carried in CustomerPONo so Sage orders can be traced back to the CRM.
+- **Rep notifications**: when the office confirms, delivers or cancels a rep's order, the rep's bell shows "Order SO-… confirmed" (for 14 days, until they open Orders).
+- Run `012_sage_export_and_status_stamp.sql` in Supabase after 011.
+- Tests: Tailwind no longer scans test files for class names.

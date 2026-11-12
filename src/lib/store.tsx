@@ -115,6 +115,7 @@ interface Ctx {
   deletePriceItem: (id: string) => void
   saveQuote: (q: { id?: string; accountId: string; status: Quote['status']; validUntil: string; notes: string; lines: QuoteLine[]; declineReason?: string }) => Quote
   deleteQuote: (id: string) => void
+  markOrdersExported: (ids: string[]) => void
   saveOrder: (o: { id?: string; accountId: string; status?: Order['status']; deliveryDate: string; notes: string; lines: QuoteLine[]; quoteId?: string | null }) => Order
   deleteOrder: (id: string) => void
   saveStock: (items: Omit<StockItem, 'id' | 'updatedAt'> & { id?: string }[] | (Omit<StockItem, 'id' | 'updatedAt'> & { id?: string })[]) => number
@@ -717,7 +718,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (u.role === 'service') {   // customer service only moves an existing order along (status and notes)
       const ex = o.id ? db.orders.find(x => x.id === o.id) : undefined
       if (!ex) throw new Error('Customer service cannot create orders')
-      const upd: Order = { ...ex, status: o.status ?? ex.status, notes: o.notes }
+      const upd: Order = { ...ex, status: o.status ?? ex.status, notes: o.notes, statusChangedAt: o.status && o.status !== ex.status ? nowISO() : ex.statusChangedAt ?? null }
       setDb(d => ({ ...d, orders: d.orders.map(x => (x.id === upd.id ? upd : x)) }))
       if (hasSupabase) persist(() => remote.saveOrder(upd), refresh)
       audit('UPDATE', 'orders', upd.id, `${upd.orderNo} · ${accountName(upd.accountId)} · ${upd.status}`, null)
@@ -739,7 +740,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const no = existing?.orderNo ?? `SO-${localDate(stamp).slice(2).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     const full: Order = { id: existing?.id ?? uid(), orderNo: no, accountId: o.accountId, repId: existing?.repId ?? (u.role === 'admin' ? acct?.repId || u.id : u.id),
       status: u.role === 'admin' && o.status ? o.status : existing?.status ?? 'Submitted', deliveryDate: o.deliveryDate, notes: o.notes, lines: o.lines, total, quoteId: o.quoteId ?? existing?.quoteId ?? null, createdAt: existing?.createdAt ?? stamp,
-      editedAt: existing ? (u.role !== 'admin' ? stamp : existing.editedAt ?? null) : null }
+      editedAt: existing ? (u.role !== 'admin' ? stamp : existing.editedAt ?? null) : null,
+      sageExportedAt: existing?.sageExportedAt ?? null, statusChangedAt: existing ? existing.statusChangedAt ?? null : stamp }
     if (!existing) {
       saveActivity({ accountId: o.accountId, at: stamp, type: 'Follow-up', summary: `Order ${no}: ${o.lines.length} line${o.lines.length > 1 ? 's' : ''}, ${total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`,
         products: o.lines.map(l => l.product).join(', '), outcome: 'Order placed', nextAction: 'Confirm delivery', followUpDate: o.deliveryDate || null, followUpDone: false })
@@ -748,6 +750,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (hasSupabase) persist(() => remote.saveOrder(full), refresh)
     audit(existing ? 'UPDATE' : 'INSERT', 'orders', full.id, `${no} · ${accountName(full.accountId)} · ${full.status}`, null)
     return full
+  }
+  const markOrdersExported: Ctx['markOrdersExported'] = ids => {
+    const u = need(); if (u.role !== 'admin' && u.role !== 'service') throw new Error('Only the office can export orders')
+    const stamp = nowISO(), set = new Set(ids)
+    setDb(d => ({ ...d, orders: d.orders.map(x => (set.has(x.id) ? { ...x, sageExportedAt: stamp } : x)) }))
+    if (hasSupabase) persist(() => remote.markOrdersExported(ids), refresh)
+    audit('UPDATE', 'orders', ids[0] ?? '', `${ids.length} order${ids.length === 1 ? '' : 's'} exported to Sage`, null)
   }
   const deleteOrder: Ctx['deleteOrder'] = id => {
     needAdmin(); const ex = db.orders.find(x => x.id === id); if (!ex) return
@@ -952,7 +961,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
-    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, saveOrder, deleteOrder, saveStock, deleteStock, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
+    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, saveOrder, markOrdersExported, deleteOrder, saveStock, deleteStock, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
     updateRouteVisit, removeRouteVisit, sendMessage, replyMessage, saveTarget, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

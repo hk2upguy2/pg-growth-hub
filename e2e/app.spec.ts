@@ -90,6 +90,32 @@ test.describe('a rep changes a submitted order', () => {
   })
 })
 
+test.describe('office exports to Sage, rep is told', () => {
+  test('confirm, export a Sage file, and the rep gets a notification', async ({ page }) => {
+    await signIn(page, 'rep'); await page.goto('/orders')
+    await page.getByRole('button', { name: /New order/ }).click()
+    const dlg = page.locator('[role=dialog], .fixed').filter({ hasText: 'New order' }).first()
+    await dlg.locator('select').first().selectOption({ index: 1 })
+    await dlg.locator('select').filter({ hasText: 'Choose…' }).first().selectOption({ index: 1 })
+    await dlg.getByRole('button', { name: /^\s*Add\s*$/ }).click()
+    await dlg.getByRole('button', { name: 'Submit order' }).click()
+    await expect(page.getByText(/Order submitted/i)).toBeVisible()
+    await page.goto('/')   // the rep is on Today (not looking at Orders) when the office confirms
+    await signOut(page)
+    await page.getByText(CARD.service).first().click()
+    await page.locator('tbody tr').first().getByRole('button', { name: 'View' }).click()
+    await page.locator('select.input').last().selectOption('Confirmed')
+    await page.getByRole('button', { name: 'Save' }).click()
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export for Sage' }).click()])
+    expect(download.suggestedFilename()).toMatch(/^pg-sage-orders-\d+\.csv$/)
+    await expect(page.locator('tbody tr').first().getByText('In Sage')).toBeVisible()
+    await signOut(page)
+    await page.getByText(CARD.rep).first().click()
+    await page.getByRole('button', { name: /Notifications/ }).first().click()
+    await expect(page.getByText(/ confirmed$/).first()).toBeVisible()
+  })
+})
+
 test.describe('logging a visit @phone', () => {
   test('a rep logs a visit from the phone bottom bar', async ({ page }) => {
     await signIn(page, 'rep')

@@ -273,6 +273,10 @@ export interface Order {
   lines: QuoteLine[]; total: number; quoteId?: string | null; createdAt: string
   /** set when the rep changed the order after submitting it, so the office re-checks it */
   editedAt?: string | null
+  /** when the office exported it to Sage (so it is not keyed twice) */
+  sageExportedAt?: string | null
+  /** when the status last changed; reps are told about it */
+  statusChangedAt?: string | null
 }
 /** One line of warehouse stock. expiryDate is the soonest expiry among the units on hand. */
 export interface StockItem {

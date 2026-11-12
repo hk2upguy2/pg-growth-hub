@@ -1,19 +1,29 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ClipboardList, Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { ClipboardList, Download, FileUp, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { Badge, ConfirmButton, EmptyState, PageHeader, useAction, useToast } from '../components/ui'
 import { OrderForm } from '../components/OrderForm'
 import { OrderDetail } from '../components/OrderDetail'
 import { exportCSV, fmtDate, money } from '../lib/utils'
 import { printPickingSheets } from '../lib/pickingSheet'
+import { buildSageExport } from '../lib/sageExport'
+import { markOrdersSeen } from '../lib/notifications'
 import { ORDER_STATUSES, Order } from '../types'
 
 const tone = { Submitted: 'On Hold', Confirmed: 'Planned', Delivered: 'Active', Cancelled: 'Lost' } as const
 
 export default function Orders() {
-  const { orders, quotes, accountName, repName, isAdmin, isService, deleteOrder, accounts, stock, user } = useStore()
+  const { orders, quotes, accountName, repName, isAdmin, isService, deleteOrder, accounts, stock, user, markOrdersExported } = useStore()
   const toast = useToast()
+  useEffect(() => { if (user && !isAdmin && !isService) markOrdersSeen(user.id, orders) }, [user, isAdmin, isService, orders])
+  const [again, setAgain] = useState(false)
+  const forSage = orders.filter(o => o.status === 'Confirmed' && (again || !o.sageExportedAt))
+  const exportSage = () => {
+    const r = buildSageExport(forSage, accounts, repName)
+    if (r.rows.length) { exportCSV(`pg-sage-orders-${new Date().toISOString().slice(0, 16).replace(/\D/g, '')}`, r.rows as unknown as Record<string, unknown>[]); markOrdersExported(r.exported.map(o => o.id)) }
+    toast(`${r.exported.length} order${r.exported.length === 1 ? '' : 's'} exported (${r.rows.length} lines).${r.skipped.length ? ` ${r.skipped.length} skipped: ${r.skipped.slice(0, 3).map(x => `${x.order.orderNo} (${x.reason})`).join('; ')}${r.skipped.length > 3 ? '…' : ''}` : ''}`, r.skipped.length ? 'err' : undefined)
+  }
   const sheets = (list: Order[]) => { if (!printPickingSheets(list, { accounts, stock, repName })) toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', 'err') }
   const run = useAction()
   const [params, setParams] = useSearchParams()
@@ -42,6 +52,13 @@ export default function Orders() {
           <button className="btn-secondary" disabled={!dayOrders.length} onClick={() => window.print()}><Printer size={16} /> Print list</button>
           <button className="btn-primary" disabled={!dayOrders.length} onClick={() => sheets(dayOrders.filter(o => o.status !== 'Cancelled'))}><ClipboardList size={16} /> Picking sheets</button>
         </div>)}
+      {office && (
+        <div className="card p-3 mb-4 flex gap-2 flex-wrap items-center print:hidden">
+          <span className="text-sm font-semibold text-navy-900">Sage export</span>
+          <span className="text-sm text-slate-600">{forSage.length} confirmed order{forSage.length === 1 ? '' : 's'} {again ? 'in total' : 'not yet in Sage'}</span>
+          <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={again} onChange={e => setAgain(e.target.checked)} /> include ones already exported</label>
+          <button className="btn-primary ml-auto" disabled={!forSage.length} onClick={exportSage}><FileUp size={16} /> Export for Sage</button>
+        </div>)}
       {office && dayOrders.length > 0 && (
         <div className="hidden print:block mb-4 text-sm">
           <h2 className="text-lg font-bold mb-2">Pacific Grocers · Orders for {day}</h2>
@@ -65,7 +82,7 @@ export default function Orders() {
                 <td className="td"><Link className="text-navy-700 hover:underline" to={`/account/${o.accountId}`}>{accountName(o.accountId)}</Link></td>
                 {office && <td className="td">{repName(o.repId)}</td>}
                 <td className="td">{fmtDate(o.createdAt)}</td><td className="td">{o.deliveryDate ? fmtDate(o.deliveryDate) : '—'}</td>
-                <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge>{o.editedAt && <span className="ml-1 text-[11px] font-semibold text-amber-700" title={`Changed by the rep on ${fmtDate(o.editedAt)}`}>Edited</span>}</td>
+                <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge>{o.sageExportedAt && <span className="ml-1 text-[11px] font-semibold text-slate-500" title={`Exported to Sage on ${fmtDate(o.sageExportedAt)}`}>In Sage</span>}{o.editedAt && <span className="ml-1 text-[11px] font-semibold text-amber-700" title={`Changed by the rep on ${fmtDate(o.editedAt)}`}>Edited</span>}</td>
                 <td className="td whitespace-nowrap">
                   {office && <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label="Print picking sheet" title="Print picking sheet" onClick={() => sheets([o])}><ClipboardList size={16} /></button>}
                   <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label={isAdmin || (!isService && o.status === 'Submitted') ? 'Edit' : 'View'} onClick={() => setEdit(o)}><Pencil size={16} /></button>

@@ -139,3 +139,17 @@ describe('reps changing their own submitted order', () => {
     const o = place(); fails(() => ctx.current.saveOrder({ ...order(o.accountId, [line({ discountPct: 12 })]), id: o.id }), /10%/)
   })
 })
+
+describe('Sage export marker and status stamp', () => {
+  it('only the office can mark orders as exported', () => {
+    as('u-admin'); const id = ctx.current.orders[0].id
+    as('u-rep1'); fails(() => ctx.current.markOrdersExported([id]), /office/i)
+    as('u-service'); ok(() => ctx.current.markOrdersExported([id])); expect(ctx.current.orders.find(o => o.id === id)!.sageExportedAt).toBeTruthy()
+  })
+  it('confirming an order stamps when the status changed', () => {
+    as('u-rep1'); const acct = ctx.current.accounts[0]; const o = ok(() => ctx.current.saveOrder(order(acct.id)))
+    expect(o.statusChangedAt).toBeTruthy()
+    as('u-service'); const c = ok(() => ctx.current.saveOrder({ ...order(acct.id), id: o.id, status: 'Confirmed', notes: '' }))
+    expect(c.status).toBe('Confirmed'); expect(new Date(c.statusChangedAt!).getTime()).toBeGreaterThanOrEqual(new Date(o.statusChangedAt!).getTime())
+  })
+})
