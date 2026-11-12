@@ -200,3 +200,6 @@ A rep can reopen their own order from **Orders** (pencil) and change the lines, 
 - **Rep notifications**: when the office confirms, delivers or cancels a rep's order, the rep's bell shows "Order SO-… confirmed" (for 14 days, until they open Orders).
 - Run `012_sage_export_and_status_stamp.sql` in Supabase after 011.
 - Tests: Tailwind no longer scans test files for class names.
+
+## v29 – Fix: "new row violates row-level security policy" when confirming an order
+Saving a changed order used an upsert, which Supabase checks against the INSERT rule; customer service (and reps editing their order) are not allowed to insert, so the save was refused after the screen had already said "Order updated". Changed orders are now saved as plain updates (customer service sends only status and notes; reps send lines, delivery date and notes), and if the security rules let zero rows through the app now says so instead of pretending it saved. No database changes.

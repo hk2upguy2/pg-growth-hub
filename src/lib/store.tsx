@@ -720,7 +720,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!ex) throw new Error('Customer service cannot create orders')
       const upd: Order = { ...ex, status: o.status ?? ex.status, notes: o.notes, statusChangedAt: o.status && o.status !== ex.status ? nowISO() : ex.statusChangedAt ?? null }
       setDb(d => ({ ...d, orders: d.orders.map(x => (x.id === upd.id ? upd : x)) }))
-      if (hasSupabase) persist(() => remote.saveOrder(upd), refresh)
+      if (hasSupabase) persist(() => remote.saveOrder(upd, 'office'), refresh)
       audit('UPDATE', 'orders', upd.id, `${upd.orderNo} · ${accountName(upd.accountId)} · ${upd.status}`, null)
       return upd
     }
@@ -747,7 +747,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         products: o.lines.map(l => l.product).join(', '), outcome: 'Order placed', nextAction: 'Confirm delivery', followUpDate: o.deliveryDate || null, followUpDone: false })
     }
     setDb(d => ({ ...d, orders: existing ? d.orders.map(x => (x.id === full.id ? full : x)) : [full, ...d.orders] }))
-    if (hasSupabase) persist(() => remote.saveOrder(full), refresh)
+    if (hasSupabase) persist(() => remote.saveOrder(full, !existing ? 'new' : u.role === 'admin' ? 'admin' : 'rep'), refresh)
     audit(existing ? 'UPDATE' : 'INSERT', 'orders', full.id, `${no} · ${accountName(full.accountId)} · ${full.status}`, null)
     return full
   }

@@ -299,12 +299,26 @@ export const remote = {
     })
     fail('save quote', error)
   },
-  async saveOrder(o: Order) {
-    const { error } = await sb().from('orders').upsert({
-      id: o.id, order_no: o.orderNo, account_id: o.accountId, rep_id: o.repId || null, status: o.status, delivery_date: o.deliveryDate || null, notes: o.notes,
-      lines: o.lines, total: o.total, quote_id: o.quoteId ?? null,
-    })
+  /**
+   * 'new' inserts the order. The others UPDATE an existing one: never an upsert, because Supabase checks the INSERT rule on an upsert,
+   * and customer service and reps are not allowed to insert on someone else's behalf ("new row violates row-level security policy").
+   * 'office' (customer service) sends only status and notes; 'rep' sends the lines, delivery date and notes but not the status; 'admin' sends everything.
+   */
+  async saveOrder(o: Order, scope: 'new' | 'office' | 'rep' | 'admin' = 'new') {
+    if (scope === 'new') {
+      const { error } = await sb().from('orders').insert({
+        id: o.id, order_no: o.orderNo, account_id: o.accountId, rep_id: o.repId || null, status: o.status, delivery_date: o.deliveryDate || null, notes: o.notes,
+        lines: o.lines, total: o.total, quote_id: o.quoteId ?? null,
+      })
+      return fail('save order', error)
+    }
+    const patch = scope === 'office' ? { status: o.status, notes: o.notes }
+      : scope === 'rep' ? { delivery_date: o.deliveryDate || null, notes: o.notes, lines: o.lines, total: o.total }
+      : { status: o.status, delivery_date: o.deliveryDate || null, notes: o.notes, lines: o.lines, total: o.total }
+    const { data, error } = await sb().from('orders').update(patch).eq('id', o.id).select('id')
     fail('save order', error)
+    // a row that the security rules hide comes back as "0 rows updated" with no error, so say so instead of pretending it worked
+    if (!data?.length) throw new Error('save order: not allowed, or the order no longer exists (it may already have been confirmed)')
   },
   async markOrdersExported(ids: string[]) {
     const { error } = await sb().from('orders').update({ sage_exported_at: new Date().toISOString() }).in('id', ids)
