@@ -106,6 +106,8 @@ test.describe('office exports to Sage, rep is told', () => {
     await page.locator('tbody tr').first().getByRole('button', { name: 'View' }).click()
     await page.locator('select.input').last().selectOption('Confirmed')
     await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Show list' }).click()
+    await expect(page.getByText(/Ready|Will be skipped/).first()).toBeVisible()
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export for Sage' }).click()])
     expect(download.suggestedFilename()).toMatch(/^pg-sage-orders-\d+\.csv$/)
     await expect(page.locator('tbody tr').first().getByText('In Sage')).toBeVisible()

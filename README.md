@@ -203,3 +203,7 @@ A rep can reopen their own order from **Orders** (pencil) and change the lines, 
 
 ## v29 – Fix: "new row violates row-level security policy" when confirming an order
 Saving a changed order used an upsert, which Supabase checks against the INSERT rule; customer service (and reps editing their order) are not allowed to insert, so the save was refused after the screen had already said "Order updated". Changed orders are now saved as plain updates (customer service sends only status and notes; reps send lines, delivery date and notes), and if the security rules let zero rows through the app now says so instead of pretending it saved. No database changes.
+
+
+## v30 – See which confirmed orders are not yet in Sage
+Orders page > Sage export card: **Show list** expands every confirmed order not yet in Sage (order, customer, Sage customer no., delivery, total) with a status per row: Ready, or why it will be skipped (e.g. customer has no Sage number). The card also says how many confirmed orders are already in Sage, which explains a count of 0. The status filter has a new choice, **Confirmed · not yet in Sage**. No database changes.

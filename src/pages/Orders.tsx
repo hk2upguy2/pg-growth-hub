@@ -18,7 +18,11 @@ export default function Orders() {
   const toast = useToast()
   useEffect(() => { if (user && !isAdmin && !isService) markOrdersSeen(user.id, orders) }, [user, isAdmin, isService, orders])
   const [again, setAgain] = useState(false)
+  const [showList, setShowList] = useState(false)
   const forSage = orders.filter(o => o.status === 'Confirmed' && (again || !o.sageExportedAt))
+  const confirmedAll = orders.filter(o => o.status === 'Confirmed')
+  const sagePreview = buildSageExport(forSage, accounts, repName)
+  const problem = (id: string) => sagePreview.skipped.find(x => x.order.id === id)?.reason
   const exportSage = () => {
     const r = buildSageExport(forSage, accounts, repName)
     if (r.rows.length) { exportCSV(`pg-sage-orders-${new Date().toISOString().slice(0, 16).replace(/\D/g, '')}`, r.rows as unknown as Record<string, unknown>[]); markOrdersExported(r.exported.map(o => o.id)) }
@@ -31,7 +35,7 @@ export default function Orders() {
   const [edit, setEdit] = useState<Order | undefined>()
   const [creating, setCreating] = useState(false)
   const fromQuote = quotes.find(q => q.id === params.get('quote'))
-  const rows = useMemo(() => orders.filter(o => !status || o.status === status).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [orders, status])
+  const rows = useMemo(() => orders.filter(o => !status || (status === '__sage' ? o.status === 'Confirmed' && !o.sageExportedAt : o.status === status)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [orders, status])
   const waiting = orders.filter(o => o.status === 'Submitted')
   const office = isAdmin || isService
   const [day, setDay] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Guam' }))
@@ -55,9 +59,23 @@ export default function Orders() {
       {office && (
         <div className="card p-3 mb-4 flex gap-2 flex-wrap items-center print:hidden">
           <span className="text-sm font-semibold text-navy-900">Sage export</span>
-          <span className="text-sm text-slate-600">{forSage.length} confirmed order{forSage.length === 1 ? '' : 's'} {again ? 'in total' : 'not yet in Sage'}</span>
+          <span className="text-sm text-slate-600">{forSage.length} confirmed order{forSage.length === 1 ? '' : 's'} {again ? 'in total' : 'not yet in Sage'}{!again && confirmedAll.length > forSage.length ? ` · ${confirmedAll.length - forSage.length} already in Sage` : ''}</span>
           <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={again} onChange={e => setAgain(e.target.checked)} /> include ones already exported</label>
-          <button className="btn-primary ml-auto" disabled={!forSage.length} onClick={exportSage}><FileUp size={16} /> Export for Sage</button>
+          <button className="btn-secondary ml-auto" disabled={!forSage.length} onClick={() => setShowList(v => !v)}>{showList ? 'Hide list' : 'Show list'}</button>
+          <button className="btn-primary" disabled={!forSage.length} onClick={exportSage}><FileUp size={16} /> Export for Sage</button>
+          {showList && forSage.length > 0 && (
+            <div className="w-full overflow-x-auto border-t border-slate-100 pt-2 mt-1">
+              <table className="w-full min-w-[640px]">
+                <thead><tr><th className="th">Order</th><th className="th">Customer</th><th className="th">Sage cust. no.</th><th className="th">Delivery</th><th className="th text-right">Total</th><th className="th">Export</th></tr></thead>
+                <tbody>{forSage.map(o => { const a = accounts.find(x => x.id === o.accountId); const why = problem(o.id); return (
+                  <tr key={o.id}>
+                    <td className="td font-medium"><button className="text-navy-700 hover:underline" onClick={() => setEdit(o)}>{o.orderNo}</button></td>
+                    <td className="td">{a?.name ?? ''}</td><td className="td">{a?.accountNo || <span className="text-red-600">missing</span>}</td>
+                    <td className="td">{o.deliveryDate ? fmtDate(o.deliveryDate) : 'ASAP'}</td><td className="td text-right">{money(o.total)}</td>
+                    <td className="td">{why ? <span className="text-red-600 text-xs">Will be skipped: {why}</span> : o.sageExportedAt ? <span className="text-slate-500 text-xs">Already sent {fmtDate(o.sageExportedAt)}</span> : <span className="text-green-700 text-xs font-medium">Ready</span>}</td>
+                  </tr>) })}</tbody>
+              </table>
+            </div>)}
         </div>)}
       {office && dayOrders.length > 0 && (
         <div className="hidden print:block mb-4 text-sm">
@@ -70,7 +88,7 @@ export default function Orders() {
             </div>))}
         </div>)}
       <div className="card p-3 mb-4 flex gap-2 flex-wrap print:hidden">
-        <select className="input !w-auto" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{ORDER_STATUSES.map(s => <option key={s}>{s}</option>)}</select>
+        <select className="input !w-auto" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{ORDER_STATUSES.map(s => <option key={s}>{s}</option>)}{office && <option value="__sage">Confirmed · not yet in Sage</option>}</select>
       </div>
       {rows.length === 0 ? <div className="card p-8"><EmptyState title="No orders yet" hint="Create an order, or open an accepted quote and choose Make order." /></div> : (
         <div className="card overflow-x-auto print:hidden">
