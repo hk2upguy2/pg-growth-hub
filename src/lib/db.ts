@@ -270,6 +270,9 @@ export const remote = {
     )
     fail('send message', error)
   },
+  async logLogin(id: string, name: string, label: string) {
+    await sb().from('audit_log').insert({ actor_id: id, actor_name: name, action: 'LOGIN', entity: 'session', record_id: id, label })
+  },
   async touchSeen(id: string) {
     await sb().from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', id)
   },

@@ -31,6 +31,15 @@ test.describe('menus match the role', () => {
     await expect(page.getByRole('link', { name: 'User Management' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Audit Log' })).toBeVisible()
   })
+  test('management can see who signed in, and when', async ({ page }) => {
+    await signIn(page, 'rep'); await signOut(page)
+    await signIn(page, 'admin')
+    await page.getByRole('link', { name: 'Audit Log' }).click()
+    await expect(page.getByText(/Who has been in today/)).toBeVisible()
+    await page.locator('select.input').first().selectOption('LOGIN')
+    await expect(page.locator('tbody tr').filter({ hasText: 'Signed in' }).first()).toBeVisible()
+    expect(await page.locator('tbody tr').filter({ hasText: 'Signed in' }).count()).toBeGreaterThanOrEqual(2)
+  })
   test('a rep who opens an admin address is sent away', async ({ page }) => {
     await signIn(page, 'rep'); await page.goto('/users')
     await expect(page.getByRole('heading', { name: 'User Management' })).toHaveCount(0)

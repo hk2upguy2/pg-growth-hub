@@ -19,6 +19,13 @@ import { NewSales, deriveAccountUpdates, sageKey } from './sales'
  */
 /** Last good copy of the data, so the app still opens and can be read without signal (Supabase mode). */
 const CACHE_KEY = 'pg-growth-hub:cache:v1'
+function deviceLabel(): string {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  const kind = /iPad|Tablet/i.test(ua) ? 'Tablet' : /iPhone|Android.*Mobile|Mobile/i.test(ua) ? 'Phone' : 'Computer'
+  const os = /iPhone|iPad|iOS/i.test(ua) ? 'iOS' : /Android/i.test(ua) ? 'Android' : /Windows/i.test(ua) ? 'Windows' : /Mac OS/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : ''
+  const app = typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)').matches ? ' (installed app)' : ''
+  return `${kind}${os ? ' · ' + os : ''}${app}`
+}
 async function cacheOwner(): Promise<string | null> { try { return (await supabase?.auth.getSession())?.data.session?.user.id ?? null } catch { return null } }
 async function saveCache(data: DB) {
   const owner = await cacheOwner(); if (!owner) return
@@ -297,6 +304,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const e: AuditEntry = { id: uid(), at: nowISO(), actorId: user.id, actorName: user.name, action, entity, recordId, label, changes: changes && Object.keys(changes).length ? changes : null }
     setDb(d => ({ ...d, audit: [e, ...d.audit].slice(0, 500) }))
   }
+  // sign-in log: one line per person per app open (at most one every 30 minutes), with the device
+  const loggedFor = useMemo(() => ({ id: '' }), [])
+  useEffect(() => {
+    if (!user || loggedFor.id === user.id) return
+    loggedFor.id = user.id
+    const key = `pg-growth-hub:last-login:${user.id}`
+    try { const t = Number(localStorage.getItem(key) || 0); if (Date.now() - t < 30 * 60000) return; localStorage.setItem(key, String(Date.now())) } catch { /* ignore */ }
+    const label = `Signed in · ${deviceLabel()}`
+    if (hasSupabase) void remote.logLogin(user.id, user.name, label).catch(() => undefined)
+    else audit('LOGIN', 'session', user.id, label, null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
   const diffOf = (a: object, b: object) => {
     const out: Record<string, [unknown, unknown]> = {}
     for (const k of Object.keys(b)) {

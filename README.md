@@ -207,3 +207,7 @@ Saving a changed order used an upsert, which Supabase checks against the INSERT 
 
 ## v30 – See which confirmed orders are not yet in Sage
 Orders page > Sage export card: **Show list** expands every confirmed order not yet in Sage (order, customer, Sage customer no., delivery, total) with a status per row: Ready, or why it will be skipped (e.g. customer has no Sage number). The card also says how many confirmed orders are already in Sage, which explains a count of 0. The status filter has a new choice, **Confirmed · not yet in Sage**. No database changes.
+
+
+## v31 – Sign-in log and last seen
+Every time someone opens the app (at most once per 30 minutes) a line is added to the Audit Log: who, when, and the device (Phone/Computer, iOS/Android/Windows/Mac, installed app or browser). Audit Log > filter **Sign-ins**; the **Who has been in today** strip shows who has and has not opened the app today (click a name to see their sign-ins). User Management has a **Last seen** column. **Database:** run `supabase/migrations/013_login_log.sql` (small; lets each person add their own sign-in line).

@@ -3,7 +3,7 @@ import { Pencil, Plus } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { Channel, Profile, Role, Territory } from '../types'
 import { Badge, Field, Modal, PageHeader, useAction } from '../components/ui'
-import { fmtDate } from '../lib/utils'
+import { fmtDate, fmtDateTime } from '../lib/utils'
 
 export default function Users() {
   const { profiles, accounts, saveProfile } = useStore()
@@ -15,14 +15,14 @@ export default function Users() {
       <PageHeader title="User Management" subtitle="Manage representatives, administrators and permissions"
         actions={<button className="btn-primary" onClick={() => setAdding(true)}><Plus size={16} /> Add user</button>} />
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[700px]"><thead><tr><th className="th">Name</th><th className="th">Email</th><th className="th">Role</th><th className="th">Territory</th><th className="th">Sales channel</th><th className="th">Accounts</th><th className="th">Status</th><th className="th">Created</th><th className="th" /></tr></thead>
+        <table className="w-full min-w-[700px]"><thead><tr><th className="th">Name</th><th className="th">Email</th><th className="th">Role</th><th className="th">Territory</th><th className="th">Sales channel</th><th className="th">Accounts</th><th className="th">Status</th><th className="th">Last seen</th><th className="th" /></tr></thead>
           <tbody>{profiles.map(p => (
             <tr key={p.id} className="hover:bg-slate-50">
               <td className="td font-medium">{p.name}</td><td className="td">{p.email}</td>
               <td className="td"><Badge tone={p.role === 'admin' ? 'A+' : 'A'}>{p.role === 'admin' ? 'Management' : p.role === 'service' ? 'Customer Service' : 'Sales Rep'}</Badge></td>
               <td className="td">{p.territory ?? 'All'}</td><td className="td">{p.role !== 'rep' ? '—' : p.channel === 'Retail' ? 'Retail' : p.channel === 'Hospitality' ? 'Hotel & Foodservice' : 'All accounts'}</td><td className="td">{accounts.filter(a => a.repId === p.id).length}</td>
               <td className="td"><Badge tone={p.active ? 'Active' : 'Inactive'}>{p.active ? 'Active' : 'Deactivated'}</Badge></td>
-              <td className="td">{fmtDate(p.createdAt)}</td>
+              <td className="td text-xs whitespace-nowrap">{p.lastSeen ? fmtDateTime(p.lastSeen) : <span className="text-slate-400">Never</span>}</td>
               <td className="td"><button className="p-1.5 rounded hover:bg-slate-100" onClick={() => setEditing(p)}><Pencil size={16} /></button></td>
             </tr>))}</tbody></table>
       </div>
