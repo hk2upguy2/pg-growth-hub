@@ -113,6 +113,7 @@ const priceFrom = (r: Row): PriceItem => ({ id: r.id, brand: r.brand, product: r
 const orderFrom = (r: Row): Order => ({
   id: r.id, orderNo: r.order_no, accountId: r.account_id, repId: r.rep_id ?? '', status: r.status, deliveryDate: r.delivery_date ?? '', notes: r.notes ?? '',
   lines: r.lines ?? [], total: num(r.total), quoteId: r.quote_id ?? null, createdAt: r.created_at, editedAt: r.edited_at ?? null, sageExportedAt: r.sage_exported_at ?? null, statusChangedAt: r.status_changed_at ?? null,
+  invoiceNo: r.invoice_no ?? null, invoicedAt: r.invoiced_at ?? null, invoiceTotal: r.invoice_total === null || r.invoice_total === undefined ? null : num(r.invoice_total), sageOrderNo: r.sage_order_no ?? null,
 })
 const stockFrom = (r: Row): StockItem => ({
   id: r.id, brand: r.brand, product: r.product, sku: r.sku ?? '', unit: r.unit ?? 'case', onHand: num(r.on_hand), incoming: num(r.incoming),
@@ -326,6 +327,13 @@ export const remote = {
   async markOrdersExported(ids: string[]) {
     const { error } = await sb().from('orders').update({ sage_exported_at: new Date().toISOString() }).in('id', ids)
     fail('mark orders exported', error)
+  },
+  async applyInvoices(links: { orderId: string; invoiceNo: string | null; invoicedAt: string | null; invoiceTotal: number | null; sageOrderNo: string | null }[]) {
+    for (const l of links) {
+      const { data, error } = await sb().from('orders').update({ invoice_no: l.invoiceNo, invoiced_at: l.invoicedAt, invoice_total: l.invoiceTotal, sage_order_no: l.sageOrderNo }).eq('id', l.orderId).select('id')
+      fail('save invoice numbers', error)
+      if (!data?.length) throw new Error('Not allowed, or an order no longer exists')
+    }
   },
   async deleteOrder(id: string) { const { error } = await sb().from('orders').delete().eq('id', id); fail('delete order', error) },
   async saveStock(list: StockItem[]) {

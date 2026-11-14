@@ -16,11 +16,11 @@ export function buildSageExport(orders: Order[], accounts: Account[], repName: (
   const rows: SageRow[] = [], exported: Order[] = [], skipped: SageExport['skipped'] = []
   for (const o of orders) {
     const a = accounts.find(x => x.id === o.accountId)
-    if (!a?.accountNo?.trim()) { skipped.push({ order: o, reason: `${a?.name ?? 'This customer'} has no Sage customer number` }); continue }
+    if (!a?.sageNo?.trim()) { skipped.push({ order: o, reason: `${a?.name ?? 'This customer'} has no Sage customer number` }); continue }
     const bad = o.lines.find(l => !l.sku?.trim())
     if (bad) { skipped.push({ order: o, reason: `"${bad.product}" has no item code` }); continue }
     o.lines.forEach((l, i) => rows.push({
-      SalesOrderNo: o.orderNo, OrderDate: mdy(o.createdAt), ShipExpireDate: mdy(o.deliveryDate), CustomerNo: a.accountNo.trim(), CustomerPONo: o.orderNo,
+      SalesOrderNo: o.orderNo, OrderDate: mdy(o.createdAt), ShipExpireDate: mdy(o.deliveryDate), CustomerNo: a.sageNo!.trim(), CustomerPONo: o.orderNo,
       SalesPerson: repName(o.repId), WarehouseCode: warehouse, Comment: o.notes ?? '', LineNo: i + 1, ItemCode: l.sku.trim(), ItemCodeDesc: l.product,
       UnitOfMeasure: l.unit.toUpperCase(), QuantityOrdered: l.qty, ListPrice: l.price, DiscountPercent: l.discountPct,
       UnitPrice: Math.round(l.price * (1 - l.discountPct / 100) * 10000) / 10000,

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ClipboardList, Printer } from 'lucide-react'
+import { ClipboardList, FileText, Printer } from 'lucide-react'
+import { printInvoices } from '../lib/invoicePrint'
 import { printPickingSheets } from '../lib/pickingSheet'
 import { useStore } from '../lib/store'
 import { Badge, Modal, useAction } from './ui'
@@ -24,6 +25,7 @@ export function OrderDetail({ order, onClose }: { order: Order; onClose: () => v
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 rounded-lg bg-slate-50 p-3">
           <Row k="Customer" v={a?.name ?? 'Customer not visible to you'} />
           <Row k="Status" v={order.status} />
+          <Row k="Sage invoice" v={order.invoiceNo ? `${order.invoiceNo}${order.invoicedAt ? ' · ' + fmtDate(order.invoicedAt) : ''}${order.invoiceTotal != null ? ' · ' + money(order.invoiceTotal) : ''}` : null} />
           <Row k="Contact" v={[a?.contactName, a?.contactPosition].filter(Boolean).join(' · ')} />
           <Row k="Placed" v={fmtDate(order.createdAt)} />
           <Row k="Phone" v={a?.phone} />
@@ -56,6 +58,7 @@ export function OrderDetail({ order, onClose }: { order: Order; onClose: () => v
         ) : (order.notes ? <div className="text-sm"><span className="text-slate-500">Notes: </span><em>{order.notes}</em></div> : <Badge tone={tone[order.status]}>{order.status}</Badge>)}
         <div className="flex justify-end gap-2 print:hidden">
           {(isService || isAdmin) && <button type="button" className="btn-secondary" onClick={() => printPickingSheets([order], { accounts, stock, repName })}><ClipboardList size={16} /> Picking sheet</button>}
+          {(isService || isAdmin) && <button type="button" className="btn-secondary" onClick={() => printInvoices([order], { accounts, repName })}><FileText size={16} /> Invoice</button>}
           <button type="button" className="btn-secondary" onClick={() => window.print()}><Printer size={16} /> Print</button>
           <button type="button" className="btn-secondary" onClick={onClose}>{isService ? 'Cancel' : 'Close'}</button>
           {isService && <button type="button" className="btn-primary" onClick={save}>Save</button>}

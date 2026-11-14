@@ -9,6 +9,7 @@ import { hasSupabase, supabase } from './supabase'
 import { emitSyncError, loadAll, persist, remote } from './db'
 import { nowISO, uid, toDateStr, localDate , todayStr } from './utils'
 import type { ImportRow } from './importer'
+import type { InvoiceLink } from './invoices'
 import { NewSales, deriveAccountUpdates, sageKey } from './sales'
 
 /**
@@ -123,6 +124,7 @@ interface Ctx {
   saveQuote: (q: { id?: string; accountId: string; status: Quote['status']; validUntil: string; notes: string; lines: QuoteLine[]; declineReason?: string }) => Quote
   deleteQuote: (id: string) => void
   markOrdersExported: (ids: string[]) => void
+  applyInvoices: (links: InvoiceLink[]) => number
   saveOrder: (o: { id?: string; accountId: string; status?: Order['status']; deliveryDate: string; notes: string; lines: QuoteLine[]; quoteId?: string | null }) => Order
   deleteOrder: (id: string) => void
   saveStock: (items: Omit<StockItem, 'id' | 'updatedAt'> & { id?: string }[] | (Omit<StockItem, 'id' | 'updatedAt'> & { id?: string })[]) => number
@@ -777,6 +779,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (hasSupabase) persist(() => remote.markOrdersExported(ids), refresh)
     audit('UPDATE', 'orders', ids[0] ?? '', `${ids.length} order${ids.length === 1 ? '' : 's'} exported to Sage`, null)
   }
+  const applyInvoices: Ctx['applyInvoices'] = links => {
+    const u = need(); if (u.role !== 'admin' && u.role !== 'service') throw new Error('Only the office can load Sage invoices')
+    const by = new Map(links.map(l => [l.orderId, l]))
+    setDb(d => ({ ...d, orders: d.orders.map(x => { const l = by.get(x.id); return l ? { ...x, invoiceNo: l.invoiceNo, invoicedAt: l.invoicedAt, invoiceTotal: l.invoiceTotal, sageOrderNo: l.sageOrderNo } : x }) }))
+    if (hasSupabase) persist(() => remote.applyInvoices(links), refresh)
+    audit('UPDATE', 'orders', links[0]?.orderId ?? '', `Sage invoice numbers loaded for ${links.length} order${links.length === 1 ? '' : 's'}`, null)
+    return links.length
+  }
   const deleteOrder: Ctx['deleteOrder'] = id => {
     needAdmin(); const ex = db.orders.find(x => x.id === id); if (!ex) return
     audit('DELETE', 'orders', id, ex.orderNo)
@@ -980,7 +990,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     profiles, ...scoped, repName, accountName,
     saveAccount, deleteAccount, saveActivity, deleteActivity, completeFollowUp,
     saveOpportunity, deleteOpportunity, savePromotion, deletePromotion,
-    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, saveOrder, markOrdersExported, deleteOrder, saveStock, deleteStock, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
+    importAccounts, importSales, importBalances, savePriceItems, deletePriceItem, saveQuote, deleteQuote, saveOrder, markOrdersExported, applyInvoices, deleteOrder, saveStock, deleteStock, addPhotos, deletePhoto, assignAccounts, saveCompetitor, deleteCompetitor, saveRoutePlan, deleteRoutePlan, addVisitToPlan,
     updateRouteVisit, removeRouteVisit, sendMessage, replyMessage, saveTarget, deleteMessage, markMessagesRead, saveProfile, resetDemo, clearDemo,
   }
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

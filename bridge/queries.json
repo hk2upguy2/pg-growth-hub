@@ -1,0 +1,6 @@
+{
+  "_note": "Sage 100 ODBC queries. Run `npm run bridge -- --discover` on the Sage server to list the real table and column names, and adjust here if your Sage version names differ. Each query must return the aliased columns shown. {SINCE} becomes the date 60 days ago (yyyy-mm-dd).",
+  "invoices": "SELECT InvoiceNo, InvoiceDate, CustomerNo, CustomerPONo AS PO, (TaxableSalesAmt + NonTaxableSalesAmt + SalesTaxAmt + FreightAmt) AS Total FROM AR_InvoiceHistoryHeader WHERE InvoiceDate >= '{SINCE}'",
+  "openOrders": "SELECT SalesOrderNo, CustomerPONo AS PO, CurrentInvoiceNo, BillToName FROM SO_SalesOrderHeader",
+  "balances": "SELECT CustomerNo, Balance FROM AR_Customer"
+}

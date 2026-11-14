@@ -8,10 +8,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.bridge.json --noEmit",
     "test:e2e": "playwright test",
     "perf": "vitest run src/__tests__/perf.test.ts && playwright test e2e/perf.spec.ts --project=phone",
-    "ci": "npm run typecheck && npm test && VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= vite build --outDir dist-ci && node scripts/check-bundle.mjs dist-ci && npm run test:e2e"
+    "ci": "npm run typecheck && npm test && VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= vite build --outDir dist-ci && node scripts/check-bundle.mjs dist-ci && npm run test:e2e",
+    "bridge": "tsx bridge/run.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +21,7 @@
   "private": "true",
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
+    "fflate": "^0.8.3",
     "lucide-react": "^1.67.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -30,6 +32,8 @@
     "@playwright/test": "^1.63.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
@@ -37,6 +41,7 @@
     "jsdom": "^31.0.0",
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",

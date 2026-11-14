@@ -49,7 +49,7 @@ export function buildSeed(): DB {
     return {
       ...(rest as Omit<Account, 'id' | 'accountNo' | 'createdAt' | 'notes' | 'isDemo' | 'monthlySales' | 'lastVisit' | 'nextFollowUp'>),
       id: `a-${i + 1}`,
-      accountNo: `PG-${String(1001 + i)}`,
+      accountNo: `PG-${String(1001 + i)}`, sageNo: `01-00${10001 + i}`,
       monthlySales: 0,
       lastVisit: lastVisitDaysAgo === null ? null : daysAgoStr(lastVisitDaysAgo),
       nextFollowUp: followUpIn === null ? null : daysFromNowStr(followUpIn),
@@ -196,7 +196,7 @@ export function buildSeed(): DB {
       const followIn = rnd() < 0.55 ? between(-12, 21) : null
       const id = `a-g${gen}`
       accounts.push({
-        id, accountNo: `PG-${1012 + gen}`, name, type: k.type, segment: k.segment, village,
+        id, accountNo: `PG-${1012 + gen}`, sageNo: `01-00${11001 + gen}`, name, type: k.type, segment: k.segment, village,
         address: 'Illustrative – address not verified', contactName: 'Demo Contact (Owner)', contactPosition: k.type === 'Hotel' ? 'Purchasing Manager' : k.type === 'Retail' ? 'Buyer' : 'Owner',
         phone: '', email: '', repId, priority, status, monthlyPotential: pot, monthlySales: 0, currentProducts: '', potentialProducts: k.products,
         competitor: 'Unknown – to verify', lastVisit: visitAgo === null ? null : daysAgoStr(visitAgo),

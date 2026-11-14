@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ClipboardList, Download, FileUp, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { ClipboardList, Download, FileText, FileUp, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { Badge, ConfirmButton, EmptyState, PageHeader, useAction, useToast } from '../components/ui'
 import { OrderForm } from '../components/OrderForm'
 import { OrderDetail } from '../components/OrderDetail'
+import { InvoiceImport } from '../components/InvoiceImport'
+import { SageLinkStatus } from '../components/SageLinkStatus'
+import { printInvoices } from '../lib/invoicePrint'
 import { exportCSV, fmtDate, money } from '../lib/utils'
 import { printPickingSheets } from '../lib/pickingSheet'
 import { buildSageExport } from '../lib/sageExport'
@@ -29,6 +32,8 @@ export default function Orders() {
     toast(`${r.exported.length} order${r.exported.length === 1 ? '' : 's'} exported (${r.rows.length} lines).${r.skipped.length ? ` ${r.skipped.length} skipped: ${r.skipped.slice(0, 3).map(x => `${x.order.orderNo} (${x.reason})`).join('; ')}${r.skipped.length > 3 ? '…' : ''}` : ''}`, r.skipped.length ? 'err' : undefined)
   }
   const sheets = (list: Order[]) => { if (!printPickingSheets(list, { accounts, stock, repName })) toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', 'err') }
+  const [loadInv, setLoadInv] = useState(false)
+  const invoices = (list: Order[]) => { if (!printInvoices(list, { accounts, repName })) toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', 'err') }
   const run = useAction()
   const [params, setParams] = useSearchParams()
   const [status, setStatus] = useState('')
@@ -54,14 +59,17 @@ export default function Orders() {
           <span className="text-sm text-slate-600">{dayOrders.length} order{dayOrders.length === 1 ? '' : 's'} · {money(dayOrders.reduce((n, o) => n + o.total, 0))}</span>
           <button className="btn-secondary ml-auto" disabled={!dayOrders.length} onClick={() => exportCSV(`pg-orders-${day}`, dayRows())}><Download size={16} /> Download</button>
           <button className="btn-secondary" disabled={!dayOrders.length} onClick={() => window.print()}><Printer size={16} /> Print list</button>
+          <button className="btn-secondary" disabled={!dayOrders.length} onClick={() => invoices(dayOrders.filter(o => o.status !== 'Cancelled'))}><FileText size={16} /> Invoices</button>
           <button className="btn-primary" disabled={!dayOrders.length} onClick={() => sheets(dayOrders.filter(o => o.status !== 'Cancelled'))}><ClipboardList size={16} /> Picking sheets</button>
         </div>)}
       {office && (
         <div className="card p-3 mb-4 flex gap-2 flex-wrap items-center print:hidden">
           <span className="text-sm font-semibold text-navy-900">Sage export</span>
+          <SageLinkStatus />
           <span className="text-sm text-slate-600">{forSage.length} confirmed order{forSage.length === 1 ? '' : 's'} {again ? 'in total' : 'not yet in Sage'}{!again && confirmedAll.length > forSage.length ? ` · ${confirmedAll.length - forSage.length} already in Sage` : ''}</span>
           <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={again} onChange={e => setAgain(e.target.checked)} /> include ones already exported</label>
-          <button className="btn-secondary ml-auto" disabled={!forSage.length} onClick={() => setShowList(v => !v)}>{showList ? 'Hide list' : 'Show list'}</button>
+          <button className="btn-secondary ml-auto" onClick={() => setLoadInv(true)}><FileText size={16} /> Load Sage invoices</button>
+          <button className="btn-secondary" disabled={!forSage.length} onClick={() => setShowList(v => !v)}>{showList ? 'Hide list' : 'Show list'}</button>
           <button className="btn-primary" disabled={!forSage.length} onClick={exportSage}><FileUp size={16} /> Export for Sage</button>
           {showList && forSage.length > 0 && (
             <div className="w-full overflow-x-auto border-t border-slate-100 pt-2 mt-1">
@@ -70,7 +78,7 @@ export default function Orders() {
                 <tbody>{forSage.map(o => { const a = accounts.find(x => x.id === o.accountId); const why = problem(o.id); return (
                   <tr key={o.id}>
                     <td className="td font-medium"><button className="text-navy-700 hover:underline" onClick={() => setEdit(o)}>{o.orderNo}</button></td>
-                    <td className="td">{a?.name ?? ''}</td><td className="td">{a?.accountNo || <span className="text-red-600">missing</span>}</td>
+                    <td className="td">{a?.name ?? ''}</td><td className="td">{a?.sageNo || <span className="text-red-600">missing</span>}</td>
                     <td className="td">{o.deliveryDate ? fmtDate(o.deliveryDate) : 'ASAP'}</td><td className="td text-right">{money(o.total)}</td>
                     <td className="td">{why ? <span className="text-red-600 text-xs">Will be skipped: {why}</span> : o.sageExportedAt ? <span className="text-slate-500 text-xs">Already sent {fmtDate(o.sageExportedAt)}</span> : <span className="text-green-700 text-xs font-medium">Ready</span>}</td>
                   </tr>) })}</tbody>
@@ -100,8 +108,9 @@ export default function Orders() {
                 <td className="td"><Link className="text-navy-700 hover:underline" to={`/account/${o.accountId}`}>{accountName(o.accountId)}</Link></td>
                 {office && <td className="td">{repName(o.repId)}</td>}
                 <td className="td">{fmtDate(o.createdAt)}</td><td className="td">{o.deliveryDate ? fmtDate(o.deliveryDate) : '—'}</td>
-                <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge>{o.sageExportedAt && <span className="ml-1 text-[11px] font-semibold text-slate-500" title={`Exported to Sage on ${fmtDate(o.sageExportedAt)}`}>In Sage</span>}{o.editedAt && <span className="ml-1 text-[11px] font-semibold text-amber-700" title={`Changed by the rep on ${fmtDate(o.editedAt)}`}>Edited</span>}</td>
+                <td className="td text-right font-semibold">{money(o.total)}</td><td className="td"><Badge tone={tone[o.status]}>{o.status}</Badge>{o.invoiceNo && <span className="ml-1 text-[11px] font-semibold text-emerald-700" title={`Sage invoice ${o.invoiceNo}${o.invoiceTotal != null ? ' · ' + money(o.invoiceTotal) : ''}`}>Inv {o.invoiceNo}</span>}{o.sageExportedAt && <span className="ml-1 text-[11px] font-semibold text-slate-500" title={`Exported to Sage on ${fmtDate(o.sageExportedAt)}`}>In Sage</span>}{o.editedAt && <span className="ml-1 text-[11px] font-semibold text-amber-700" title={`Changed by the rep on ${fmtDate(o.editedAt)}`}>Edited</span>}</td>
                 <td className="td whitespace-nowrap">
+                  {office && <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label="Print invoice" title="Print invoice" onClick={() => invoices([o])}><FileText size={16} /></button>}
                   {office && <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label="Print picking sheet" title="Print picking sheet" onClick={() => sheets([o])}><ClipboardList size={16} /></button>}
                   <button className="text-slate-500 hover:text-navy-700 mr-2" aria-label={isAdmin || (!isService && o.status === 'Submitted') ? 'Edit' : 'View'} onClick={() => setEdit(o)}><Pencil size={16} /></button>
                   {isAdmin && <ConfirmButton className="text-slate-400 hover:text-red-600" message={`Delete order ${o.orderNo}?`} onConfirm={() => run(() => deleteOrder(o.id), 'Order deleted')}><Trash2 size={16} /></ConfirmButton>}
@@ -110,6 +119,7 @@ export default function Orders() {
           </table>
         </div>
       )}
+      {loadInv && <InvoiceImport onClose={() => setLoadInv(false)} />}
       {(creating || fromQuote) && <OrderForm open onClose={close} fromQuote={fromQuote} />}
       {edit && (isAdmin || (!isService && edit.repId === user?.id && edit.status === 'Submitted') ? <OrderForm key={edit.id + edit.status} open order={edit} onClose={() => setEdit(undefined)} /> : <OrderDetail key={edit.id + edit.status} order={edit} onClose={() => setEdit(undefined)} />)}
     </>

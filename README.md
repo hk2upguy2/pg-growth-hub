@@ -211,3 +211,14 @@ Orders page > Sage export card: **Show list** expands every confirmed order not 
 
 ## v31 – Sign-in log and last seen
 Every time someone opens the app (at most once per 30 minutes) a line is added to the Audit Log: who, when, and the device (Phone/Computer, iOS/Android/Windows/Mac, installed app or browser). Audit Log > filter **Sign-ins**; the **Who has been in today** strip shows who has and has not opened the app today (click a name to see their sign-ins). User Management has a **Last seen** column. **Database:** run `supabase/migrations/013_login_log.sql` (small; lets each person add their own sign-in line).
+
+
+## v32 – Print invoices, load Sage invoice numbers, Sage customer number fix
+- **Print invoice** (Orders: icon on each row, **Invoices** button on the Daily order list, and **Invoice** in the order detail; office only). Prints **PRO FORMA INVOICE** until Sage has issued a number, then **INVOICE** with the Sage invoice number. If Sage's invoice total differs from the order, the page says so.
+- **Load Sage invoices** (Orders, Sage export card): choose Sage's *Invoice Listing* and/or *Open Sales Order Listing* (.xlsx or .csv). Orders are matched on the CRM order number, which the Sage export puts in the Customer PO field. Each order gets Sage invoice no, date, total and Sage order no. Sage documents that did not come from the CRM are ignored.
+- **Fix:** the Sage export, the picking sheet and the export list used the CRM account number (PG-1001) instead of the Sage customer number. They now use the Sage customer number; customers without one are skipped and reported.
+- **Database:** run `supabase/migrations/014_sage_invoices.sql`.
+
+
+## v33 – Sage link (automatic two-way connection)
+New `bridge/` program for the Sage server: sends Confirmed orders to Sage (Visual Integrator file), brings back Sage invoice numbers/dates/totals and customer balances, every 5 minutes. The Orders page shows "Sage link: synced N min ago". Setup guide: `docs/SAGE_LINK.md`. Run `npm run bridge -- --discover`, `--once --dry-run`, then `--once`. **Database:** run `015_sage_sync.sql` (and 014 if not yet run).

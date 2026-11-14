@@ -277,6 +277,11 @@ export interface Order {
   sageExportedAt?: string | null
   /** when the status last changed; reps are told about it */
   statusChangedAt?: string | null
+  /** from Sage's Invoice Listing / Open Sales Order Listing (matched on the CRM order number in the PO field) */
+  invoiceNo?: string | null
+  invoicedAt?: string | null
+  invoiceTotal?: number | null
+  sageOrderNo?: string | null
 }
 /** One line of warehouse stock. expiryDate is the soonest expiry among the units on hand. */
 export interface StockItem {

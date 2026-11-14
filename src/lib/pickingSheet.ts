@@ -43,7 +43,7 @@ export function pickingSheetHtml(orders: Order[], ctx: SheetContext): string {
         <div class="l">
           <p><b>Warehouse:</b> 000 &nbsp;&nbsp;&nbsp; MAIN WAREHOUSE</p>
           <p><b>Order Number:</b> ${esc(o.orderNo)}</p>
-          <p><b>Customer Number:</b> ${esc(a?.accountNo ?? '')}</p>
+          <p><b>Customer Number:</b> ${esc(a?.sageNo ?? '')}</p>
         </div>
         <div class="r">
           <p><b>Order Date:</b> ${esc(dmy(o.createdAt))}</p>
